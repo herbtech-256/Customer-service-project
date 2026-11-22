@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bucke Café Table Watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* layout: status strip on top, live feed beside table list + alerts, daily report below */
+  --bg:#0d141b; --panel:#151f29; --panel2:#1b2733; --line:#263544;
+  --ink:#e8eef4; --muted:#93a7b9; --accent:#6db6f0;
+  --free:#3fd17a; --busy:#ff5b4f; --wait:#ffb21f; --clean:#c39bff;
+  --display:'Archivo',system-ui,sans-serif;
+  --body:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--body)}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:14px 16px 40px;display:grid;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;justify-content:space-between}
+h1{font:800 22px/1.1 var(--display);margin:0;letter-spacing:.2px;text-wrap:balance}
+h1 small{display:block;font:500 12px var(--body);color:var(--muted);letter-spacing:.3px;margin-top:3px}
+h2{font:600 15px var(--display);margin:0;letter-spacing:.3px}
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;padding:7px 13px;border-radius:7px;cursor:pointer;color:var(--muted);font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--panel2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.clock{font:500 14px var(--mono);color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;border-left:4px solid var(--c,var(--line))}
+.kpi b{display:block;font:800 24px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--muted)}
+.main{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px;min-width:0}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.feedbox{background:#081016;border-radius:10px;display:flex;justify-content:center;align-items:center;min-height:200px;position:relative;overflow:hidden}
+canvas#feed{display:block;touch-action:manipulation;cursor:default}
+canvas#feed.drawing{cursor:crosshair}
+.drawhint{position:absolute;left:8px;right:8px;top:8px;background:rgba(13,20,27,.88);border:1px solid var(--accent);border-radius:8px;padding:7px 10px;font-size:13px;display:none}
+.drawhint.on{display:block}
+.tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:7px 12px;cursor:pointer;font-weight:600;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:#06121c;border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.seg button:focus-visible,summary:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.note{font-size:13px;color:var(--muted);margin:0}
+.ai{font:500 12px var(--mono);color:var(--muted)}
+.loadhelp{background:rgba(255,178,31,.1);border:1px solid rgba(255,178,31,.5);border-radius:10px;padding:9px 11px;font-size:13px}
+.loadhelp b{color:var(--wait)}
+.btn.claude{border-color:#d9825b;color:#f3b294}
+.ccheck{background:var(--panel2);border:1px solid #6b4a3a;border-radius:10px;padding:10px 12px;display:grid;gap:8px;font-size:13px}
+.ccheck h3{margin:0;font:600 14px var(--display);display:flex;justify-content:space-between;gap:8px}
+.ccheck h3 span{font:500 12px var(--body);color:var(--muted)}
+.ccheck table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.ccheck th,.ccheck td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+.ccheck th{font-weight:600;color:var(--muted);font-size:12px}
+.ccheck .chg{color:var(--accent)}
+.ccheck p{margin:0;color:var(--muted)}
+.ai.ok{color:var(--free)} .ai.err{color:var(--busy)}
+input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
+.alerts{display:grid;gap:6px}
+.alert{display:flex;gap:10px;align-items:center;background:rgba(255,178,31,.1);border:1px solid rgba(255,178,31,.5);border-radius:10px;padding:8px 10px}
+.alert .dot{width:10px;height:10px;border-radius:50%;background:var(--wait);flex:none;animation:pulse 1.2s infinite}
+.alert div{flex:1;min-width:0;font-size:13px}
+.alert strong{display:block;font-size:14px}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.alert .dot{animation:none}}
+.empty{font-size:13px;color:var(--muted);padding:4px 2px}
+.trows{display:grid;gap:6px}
+.trow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;background:var(--panel2);border-radius:10px;padding:8px 10px;border-left:4px solid var(--sc)}
+.tname{font:800 16px var(--display);min-width:34px}
+.tinfo{font-size:13px;color:var(--muted);min-width:0}
+.tinfo .pill{display:inline-block;font:600 11px var(--body);letter-spacing:.4px;text-transform:uppercase;color:var(--sc);margin-right:6px}
+.timer{font:500 15px var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.trow .act{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}
+.trow .act:empty{display:none}
+.trow .act .btn{padding:5px 10px;font-size:12px}
+.next{display:flex;align-items:center;gap:12px;background:var(--panel2);border-radius:10px;padding:10px 12px}
+.next b{font:800 26px var(--display)}
+.next div{font-size:13px;color:var(--muted)}
+.report{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;align-items:center}
+.bars{display:grid;grid-template-columns:repeat(15,1fr);gap:4px;align-items:end;height:150px;border-bottom:1px solid var(--line);position:relative;
+  background:repeating-linear-gradient(to top,transparent 0 36px,rgba(147,167,185,.12) 36px 37px)}
+.bar{background:rgba(109,182,240,.35);border-radius:4px 4px 0 0;min-height:2px;position:relative}
+.bar.peak{background:var(--busy)}
+.bar.now{outline:1px dashed var(--accent);outline-offset:1px}
+.bar .v{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font:500 10px var(--mono);color:var(--muted);white-space:nowrap}
+.bar.peak .v{color:var(--ink)}
+.hours{display:grid;grid-template-columns:repeat(15,1fr);gap:4px;font:500 10px var(--mono);color:var(--muted);text-align:center;margin-top:4px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--panel2);border-radius:10px;padding:9px 11px}
+.stat b{display:block;font:800 20px var(--display);font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.peakline{font-size:13px;color:var(--muted)}
+.peakline b{color:var(--busy)}
+details{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+summary{cursor:pointer;font:600 15px var(--display)}
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:10px}
+.settings label{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.settings .sel{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%}
+.settings .chk{display:flex;align-items:center;gap:8px;color:var(--ink)}
+.settings input[type=number]{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+ol.steps{margin:0;padding-left:20px;font-size:13px;color:var(--muted);display:grid;gap:3px}
+.side{display:grid;gap:14px;min-width:0}
+.ops,.mgr{display:grid;gap:14px}
+.mgr-top{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
+.mgr-status{font:500 12px var(--mono);color:var(--muted)}
+.mgr-status.err{color:var(--busy)}
+.mgr-banner{background:rgba(109,182,240,.1);border:1px solid rgba(109,182,240,.45);border-radius:10px;padding:9px 12px;font-size:13px}
+.mgr-kpis{grid-template-columns:repeat(3,1fr)}
+.kpi small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.mgr-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.bars.days{grid-template-columns:repeat(var(--n,7),1fr)}
+.hours.days{grid-template-columns:repeat(var(--n,7),1fr)}
+.insights{margin:0;padding-left:18px;display:grid;gap:6px;font-size:14px}
+.insights b{color:var(--ink)}
+.tscroll{overflow-x:auto}
+.mtable{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;min-width:520px}
+.mtable th{text-align:left;font-weight:600;font-size:12px;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.mtable td{padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.mtable td.bad{color:var(--wait);font-weight:600}
+.mtable td.num,.mtable th.num{text-align:right}
+.btn.danger{border-color:rgba(255,91,79,.6);color:#ff8a80}
+.btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.modal{position:fixed;inset:0;background:rgba(4,8,12,.7);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.modal-box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:380px;display:grid;gap:10px}
+.savenote{font-size:12px;color:var(--muted)}
+.savenote.ok{color:var(--free)} .savenote.err{color:var(--busy)}
+@media (max-width:860px){
+  .main,.report,.mgr-grid{grid-template-columns:1fr}
+  .mgr-kpis{grid-template-columns:repeat(2,1fr)}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Customer Service Project<small>Bucke Café · AI camera table tracking</small></h1>
+    <div class="seg" role="group" aria-label="Source">
+      <button id="m-demo" aria-pressed="true">Demo café</button>
+      <button id="m-video" aria-pressed="false">My video</button>
+      <button id="m-mgr" aria-pressed="false">Manager</button>
+    </div>
+    <div class="clock" id="clock">--:--</div>
+  </header>
+
+  <div id="ops" class="ops">
+  <section class="kpis" aria-label="Right now">
+    <div class="kpi" style="--c:var(--free)"><b id="k-free">0/0</b><span>Tables free</span></div>
+    <div class="kpi" style="--c:var(--busy)"><b id="k-guests">0</b><span>Guests seated</span></div>
+    <div class="kpi" style="--c:var(--wait)"><b id="k-wait">0</b><span>Waiting for waiter</span></div>
+    <div class="kpi" style="--c:var(--clean)"><b id="k-clean">0</b><span>Need cleaning</span></div>
+  </section>
+
+  <div class="main">
+    <section class="card">
+      <div class="card-h">
+        <h2 id="feed-title">Floor · demo</h2>
+        <div class="legend">
+          <span><i style="background:var(--free)"></i>Free</span>
+          <span><i style="background:var(--busy)"></i>Seated</span>
+          <span><i style="background:var(--wait)"></i>No waiter yet</span>
+          <span><i style="background:var(--clean)"></i>Needs cleaning</span>
+        </div>
+      </div>
+      <div class="feedbox" id="feedbox">
+        <canvas id="feed" aria-label="Live view of the café floor with table zones"></canvas>
+        <div class="drawhint" id="drawhint">Tap the 4 corners of the table area (include the chairs). <span id="drawcount">0/4</span></div>
+      </div>
+      <div class="tools" id="tools-demo">
+        <p class="note">Simulated café running 12× faster, so you can watch timers, alerts and cleaning happen. Switch to <b>My video</b> to run the AI on a recording.</p>
+      </div>
+      <div class="tools" id="tools-video" hidden>
+        <button class="btn primary" id="b-load" type="button">Load video</button>
+        <input type="file" id="file" accept="video/*,.mp4,.mov,.3gp,.webm,.mkv">
+        <button class="btn" id="b-add">Add table</button>
+        <button class="btn" id="b-cancel" hidden>Cancel</button>
+        <button class="btn" id="b-undo">Remove last table</button>
+        <button class="btn" id="b-play">Pause</button>
+        <button class="btn" id="b-boxes" aria-pressed="true">AI boxes: on</button>
+        <button class="btn claude" id="b-claude" hidden>Double-check with Claude</button>
+        <span class="ai" id="ai">AI: waiting for a video</span>
+        <label class="savenote" id="save-note"><input type="checkbox" id="save-on"> Save visits for the Manager view</label>
+      </div>
+      <div class="loadhelp" id="loadhelp" hidden></div>
+      <div class="ccheck" id="ccheck" hidden></div>
+      <div class="tools" hidden>
+      </div>
+      <ol class="steps" id="steps" hidden>
+        <li>Record 20–60 seconds of the tables from a high corner, then tap <b>Load video</b>.</li>
+        <li>Tap <b>Add table</b> and tap the 4 corners around each table and its chairs.</li>
+        <li>The AI counts people in each area: green when empty, red once guests sit.</li>
+      </ol>
+    </section>
+
+    <div class="side">
+      <section class="card">
+        <div class="card-h"><h2>Alerts</h2><span class="note" id="alert-sum"></span></div>
+        <div class="alerts" id="alerts"></div>
+      </section>
+      <section class="card">
+        <h2>Next table to free up</h2>
+        <div id="next"></div>
+      </section>
+      <section class="card">
+        <h2>Tables</h2>
+        <div class="trows" id="trows"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="card-h"><h2>Daily report</h2><span class="note" id="rep-date"></span></div>
+    <div class="report">
+      <div>
+        <div class="peakline" id="peakline"></div>
+        <div style="height:22px"></div>
+        <div class="bars" id="bars" aria-label="Guests arriving per hour"></div>
+        <div class="hours" id="hours"></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><b id="s-parties">0</b><span>Groups served</span></div>
+        <div class="stat"><b id="s-guests">0</b><span>Guests today</span></div>
+        <div class="stat"><b id="s-avgg">0</b><span>Avg guests per table</span></div>
+        <div class="stat"><b id="s-stay">0m</b><span>Avg time at table</span></div>
+      </div>
+    </div>
+  </section>
+
+  <details>
+    <summary>Settings</summary>
+    <div class="settings">
+      <label for="set-alert">Alert if no waiter after (minutes)<input type="number" id="set-alert" min="1" max="60" step="1"></label>
+      <label for="set-sit">Seconds before a table counts as seated<input type="number" id="set-sit" min="1" max="60" step="1"></label>
+      <label for="set-leave">Seconds empty before guests count as gone<input type="number" id="set-leave" min="2" max="120" step="1"></label>
+      <label for="set-detail">Detail (higher finds small or far-away people, but each check is slower)
+        <select id="set-detail" class="sel"><option value="fast">Fast · whole picture at once</option><option value="sharp">Sharp · zooms into parts (recommended)</option><option value="max">Max · strongest zoom, slowest</option></select></label>
+      <label for="set-roi" class="chk"><input type="checkbox" id="set-roi"> Only look around my tables (sharper and faster)</label>
+      <label for="set-claude">Ask Claude to check automatically every (minutes, 0 = off). Tap the Claude button once first to allow it.<input type="number" id="set-claude" min="0" max="60" step="1"></label>
+      <label for="set-score">AI sensitivity (lower finds more people, more mistakes): <span id="score-v"></span><input type="range" id="set-score" min="0.2" max="0.7" step="0.05"></label>
+    </div>
+  </details>
+  </div>
+
+  <section id="manager" class="mgr" hidden aria-label="Manager overview">
+    <div class="mgr-top">
+      <div class="seg" role="group" aria-label="Period">
+        <button data-range="1" aria-pressed="true">Today</button>
+        <button data-range="7" aria-pressed="false">7 days</button>
+        <button data-range="30" aria-pressed="false">30 days</button>
+      </div>
+      <div class="tools">
+        <button class="btn" id="mg-example" aria-pressed="false">Show example data</button>
+        <button class="btn" id="mg-copy">Copy as spreadsheet</button>
+        <button class="btn danger" id="mg-clear" hidden>Delete saved data…</button>
+      </div>
+    </div>
+    <div class="mgr-status" id="mg-status">Loading saved visits…</div>
+    <div class="mgr-banner" id="mg-banner" hidden></div>
+    <section class="kpis mgr-kpis" id="mg-kpis"></section>
+    <section class="card"><div class="card-h"><h2>What stands out</h2></div><ul class="insights" id="mg-insights"></ul></section>
+    <div class="mgr-grid">
+      <section class="card"><div class="card-h"><h2>Guests arriving by hour</h2><span class="note" id="mg-hours-note"></span></div>
+        <div style="height:20px"></div><div class="bars" id="mg-hours"></div><div class="hours" id="mg-hours-x"></div></section>
+      <section class="card" id="mg-days-card"><div class="card-h"><h2>Guests per day</h2><span class="note" id="mg-days-note"></span></div>
+        <div style="height:20px"></div><div class="bars days" id="mg-days"></div><div class="hours days" id="mg-days-x"></div></section>
+    </div>
+    <section class="card"><div class="card-h"><h2>Tables</h2><span class="note">Slow waiter or cleaning times are marked</span></div>
+      <div class="tscroll"><table class="mtable" id="mg-tables"></table></div></section>
+    <section class="card"><div class="card-h"><h2>Latest visits</h2><span class="note" id="mg-visits-note"></span></div>
+      <div class="tscroll"><table class="mtable" id="mg-visits"></table></div></section>
+    <div class="modal" id="mg-confirm" hidden>
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="mg-confirm-h">
+        <h2 id="mg-confirm-h">Delete saved visits?</h2>
+        <p class="note">This removes every saved visit for the selected period from the database, for everyone. Test recordings are a good reason. It can't be undone.</p>
+        <div class="tools"><button class="btn" id="mg-cancel">Keep them</button><button class="btn danger" id="mg-do-clear">Delete</button></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, '0');
+const fmtDur = ms => { const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`; };
+const fmtClock = t => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const MIN = 60000;
+const COLORS = { free: '#3fd17a', occupied: '#ff5b4f', wait: '#ffb21f', cleaning: '#c39bff' };
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+/* ---------- settings ---------- */
+const settings = Object.assign({ detail: 'sharp', roi: true, claudeEvery: 0, alertMin: 5, sitSec: 8, leaveSec: 25, resumeSec: 45, minScore: 0.3, reoccupySec: 90, cleanSec: 3 }, LS.get('bucke-settings', {}));
+function bindSetting(id, key, cast) {
+  const el = $(id); el.value = settings[key];
+  el.addEventListener('input', () => { const v = cast(el.value); if (!isNaN(v) && v > 0) { settings[key] = v; LS.set('bucke-settings', settings); showScore(); } });
+}
+function showScore() { $('#score-v').textContent = Number(settings.minScore).toFixed(2); }
+bindSetting('#set-alert', 'alertMin', Number); bindSetting('#set-sit', 'sitSec', Number);
+bindSetting('#set-leave', 'leaveSec', Number);
+$('#set-claude').value = settings.claudeEvery; $('#set-claude').addEventListener('input', e => { const v = Number(e.target.value); if (v >= 0) { settings.claudeEvery = v; LS.set('bucke-settings', settings); } });
+$('#set-detail').value = settings.detail; $('#set-detail').addEventListener('change', e => { settings.detail = e.target.value; LS.set('bucke-settings', settings); });
+$('#set-roi').checked = settings.roi; $('#set-roi').addEventListener('change', e => { settings.roi = e.target.checked; LS.set('bucke-settings', settings); }); bindSetting('#set-score', 'minScore', Number); showScore();
+
+/* ---------- state ---------- */
+function newStore() { return { tables: [], sessions: [], alerts: [], seq: 0 }; }
+const store = { demo: newStore(), video: newStore() };
+let mode = 'demo';
+const S = () => store[mode];
+const clock = {
+  t0: performance.now(), base: 0, speed: 12,
+  now() { return mode === 'demo' ? this.base + (performance.now() - this.t0) * this.speed : Date.now(); }
+};
+
+function makeTable(name, poly) {
+  return { id: name, name, poly, status: 'free', since: 0, seatedAt: 0, guests: 0, waiterAt: 0, alerted: false,
+           presentSince: null, absentSince: null, cleanerSeen: false, count: 0 };
+}
+
+/* Table state machine. count = people the camera sees inside the table area. */
+function updateTable(st, tb, count, t, raw) {
+  if (raw === undefined) raw = count;
+  if (raw > 0) { if (tb.rawStart == null || t - tb.rawLast > 2500) tb.rawStart = t; tb.rawLast = t; }
+  else if (tb.rawLast != null && t - tb.rawLast > 2500) tb.rawStart = null;
+  tb.count = count;
+  if (count > 0) { tb.absentSince = null; if (tb.presentSince == null) tb.presentSince = t; }
+  else { tb.presentSince = null; if (tb.absentSince == null) tb.absentSince = t; }
+  if (tb.status === 'free') {
+    if (count > 0 && tb.rawStart != null && t - tb.rawStart >= settings.sitSec * 1000) {
+      Object.assign(tb, { status: 'occupied', since: tb.rawStart, seatedAt: tb.rawStart, guests: count, waiterAt: 0, alerted: false });
+    }
+  } else if (tb.status === 'occupied') {
+    if (count > tb.guests) tb.guests = count;
+    if (!tb.waiterAt && !tb.alerted && t - tb.seatedAt >= settings.alertMin * MIN) {
+      tb.alerted = true;
+      st.alerts.push({ id: ++st.seq, table: tb.name, t, at: tb.seatedAt, resolved: 0 });
+    }
+    if (count === 0 && t - tb.absentSince >= settings.leaveSec * 1000) {
+      st.sessions.push({ table: tb.name, start: tb.seatedAt, end: tb.absentSince, guests: Math.max(1, tb.guests), waiterAt: tb.waiterAt || 0, alerted: !!tb.alerted, src: 'ai' }); tb.lastSession = st.sessions[st.sessions.length - 1];
+      tb.prev = { seatedAt: tb.seatedAt, guests: tb.guests, waiterAt: tb.waiterAt, alerted: tb.alerted, session: st.sessions[st.sessions.length - 1] };
+      resolveAlerts(st, tb.name, t);
+      Object.assign(tb, { status: 'cleaning', since: tb.absentSince, cleanerSeen: false });
+    }
+  } else if (tb.status === 'cleaning') {
+    if (count > 0 && tb.prev && t - tb.since < settings.resumeSec * 1000) {
+      const i = st.sessions.indexOf(tb.prev.session); if (i >= 0) st.sessions.splice(i, 1);
+      Object.assign(tb, { status: 'occupied', seatedAt: tb.prev.seatedAt, since: tb.prev.seatedAt, guests: tb.prev.guests, waiterAt: tb.prev.waiterAt, alerted: tb.prev.alerted, prev: null });
+      return;
+    }
+    if (count > 0) {
+      tb.cleanerSeen = true;
+      if (t - tb.presentSince >= settings.reoccupySec * 1000) {   // someone stayed long: new guests sat at a dirty table
+        Object.assign(tb, { status: 'occupied', since: tb.presentSince, seatedAt: tb.presentSince, guests: count, waiterAt: 0, alerted: false });
+      }
+    } else if (tb.cleanerSeen && t - tb.absentSince >= settings.cleanSec * 1000) {
+      markClean(tb, t);
+    }
+  }
+}
+function resolveAlerts(st, name, t) { for (const a of st.alerts) if (a.table === name && !a.resolved) a.resolved = t; }
+function waiterVisited(tb, t) { tb.waiterAt = t; resolveAlerts(S(), tb.name, t); }
+function markClean(tb, t) { if (tb.lastSession && !tb.lastSession.cleanedAt && tb.status === 'cleaning') tb.lastSession.cleanedAt = t; Object.assign(tb, { status: 'free', since: t, guests: 0, cleanerSeen: false, prev: null }); }
+function visualState(tb) { return tb.status === 'occupied' && tb.alerted && !tb.waiterAt ? 'wait' : tb.status; }
+
+/* ---------- demo café simulation ---------- */
+const FLOOR_ASPECT = 4 / 3;
+const DEMO_TABLES = [
+  ['T1', 0.06, 0.08, 0.30, 0.36, 'sq'], ['T2', 0.38, 0.08, 0.62, 0.36, 'rd'], ['T3', 0.70, 0.08, 0.94, 0.36, 'sq'],
+  ['T4', 0.06, 0.48, 0.30, 0.76, 'rd'], ['T5', 0.38, 0.48, 0.62, 0.76, 'sq'], ['T6', 0.70, 0.48, 0.94, 0.76, 'rd']
+];
+let seed = 7;
+const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+const between = (a, b) => a + rnd() * (b - a);
+const busyness = h => 0.12 + 1.2 * Math.exp(-((h - 12.7) ** 2) / 1.6) + 0.8 * Math.exp(-((h - 19.5) ** 2) / 2) ;
+const sims = {};
+function demoInit() {
+  const st = store.demo;
+  const day = new Date(); day.setHours(8, 0, 0, 0);
+  st.tables = DEMO_TABLES.map(([n, x1, y1, x2, y2, shape]) => {
+    const tb = makeTable(n, [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]); tb.shape = shape;
+    sims[n] = { phase: 'idle', next: day.getTime() + between(10, 100) * MIN, party: 0 };
+    return tb;
+  });
+  // fast-forward the morning so the report has data
+  const end = new Date(day); end.setHours(13, 18, 0, 0);
+  for (let t = day.getTime(); t < end.getTime(); t += 2000) demoStep(t);
+  // set a few tables to show every state right away
+  const t = end.getTime();
+  forceSeat('T5', t, 6.5, 3, 4.5);
+  forceSeat('T2', t, 3.2, 2, 99);
+  const t3 = st.tables.find(x => x.name === 'T3'), s3 = sims.T3;
+  if (t3.status !== 'cleaning') {
+    if (t3.status === 'occupied') st.sessions.push({ table: 'T3', start: t3.seatedAt, end: t - 2 * MIN, guests: t3.guests });
+    Object.assign(t3, { status: 'cleaning', since: t - 2 * MIN, cleanerSeen: false, presentSince: null, absentSince: t - 2 * MIN });
+    Object.assign(s3, { phase: 'left', cleanerAt: t + 3 * MIN });
+  }
+  clock.base = t; clock.t0 = performance.now();
+}
+function forceSeat(name, t, minAgo, party, waiterInMin) {
+  const st = store.demo, tb = st.tables.find(x => x.name === name), sm = sims[name];
+  resolveAlerts(st, name, t);
+  const seated = t - minAgo * MIN;
+  Object.assign(tb, { status: 'occupied', since: seated, seatedAt: seated, guests: party, waiterAt: 0, alerted: false, presentSince: seated, absentSince: null });
+  Object.assign(sm, { phase: 'seated', party, leaveAt: t + between(30, 50) * MIN, waiterAt: t + waiterInMin * MIN, waiterDone: false });
+  updateTable(st, tb, party, t);
+}
+function demoStep(t) {
+  const st = store.demo, h = new Date(t).getHours() + new Date(t).getMinutes() / 60;
+  for (const tb of st.tables) {
+    const sm = sims[tb.name]; let count = 0;
+    if (sm.phase === 'idle') {
+      if (t >= sm.next && tb.status === 'free') {
+        Object.assign(sm, { phase: 'seated', party: 1 + Math.floor(rnd() * 4), leaveAt: t + between(22, 65) * MIN,
+          waiterAt: t + between(1, 8) * MIN, waiterDone: false });
+      }
+    }
+    if (sm.phase === 'seated') {
+      count = sm.party;
+      if (!sm.waiterDone && t >= sm.waiterAt && tb.status === 'occupied') { sm.waiterDone = true; waiterVisitedIn(st, tb, t); }
+      if (t >= sm.leaveAt) { sm.phase = 'left'; sm.cleanerAt = t + settings.leaveSec * 1000 + between(1, 6) * MIN; }
+    } else if (sm.phase === 'left') {
+      if (t >= sm.cleanerAt && tb.status === 'cleaning') { sm.phase = 'cleaner'; sm.cleanEnd = t + 40000; }
+    }
+    if (sm.phase === 'cleaner') {
+      count = 1;
+      if (t >= sm.cleanEnd) { sm.phase = 'idle'; sm.next = t + 10000 + between(2, 22) * MIN / busyness(h); count = 0; }
+    }
+    sm.count = count;
+    updateTable(st, tb, count, t);
+  }
+}
+function waiterVisitedIn(st, tb, t) { tb.waiterAt = t; resolveAlerts(st, tb.name, t); }
+let lastDemoT = 0;
+function demoTick() {
+  const t = clock.now();
+  if (!lastDemoT) lastDemoT = t;
+  for (let s = lastDemoT + 2000; s <= t; s += 2000) { demoStep(s); lastDemoT = s; }
+}
+
+/* ---------- canvas ---------- */
+const cv = $('#feed'), g = cv.getContext('2d'), box = $('#feedbox');
+let aspect = FLOOR_ASPECT, cssW = 0, cssH = 0;
+function fitCanvas() {
+  const maxW = box.clientWidth, maxH = Math.max(260, window.innerHeight * 0.68);
+  let w = maxW, h = w / aspect; if (h > maxH) { h = maxH; w = h * aspect; }
+  cssW = Math.round(w); cssH = Math.round(h);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = cssW * dpr; cv.height = cssH * dpr; cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', fitCanvas);
+
+function drawFloor(t) {
+  const W = cssW, H = cssH;
+  g.fillStyle = '#1d2630'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(255,255,255,.035)'; g.lineWidth = 1;
+  for (let x = 0; x < W; x += 24) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+  g.fillStyle = '#2a3846'; g.fillRect(W * 0.06, H * 0.86, W * 0.88, H * 0.09);
+  g.fillStyle = '#93a7b9'; g.font = `600 ${Math.max(10, W * 0.022)}px IBM Plex Sans, sans-serif`; g.textAlign = 'center';
+  g.fillText('COUNTER · KITCHEN', W / 2, H * 0.915);
+  for (const tb of store.demo.tables) {
+    const [a, , c] = [tb.poly[0], tb.poly[1], tb.poly[2]];
+    const x1 = a[0] * W, y1 = a[1] * H, x2 = c[0] * W, y2 = c[1] * H, cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+    const tw = (x2 - x1) * 0.46, th = (y2 - y1) * 0.46;
+    g.fillStyle = '#3a4a5a';
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      g.beginPath(); g.arc(cx + dx * (tw * 0.5 + 10), cy + dy * (th * 0.5 + 10), Math.min(W, H) * 0.022, 0, 7); g.fill();
+    }
+    g.fillStyle = '#56442f';
+    if (tb.shape === 'rd') { g.beginPath(); g.ellipse(cx, cy, tw / 2, th / 2, 0, 0, 7); g.fill(); }
+    else { roundRect(cx - tw / 2, cy - th / 2, tw, th, 6); g.fill(); }
+    const sm = sims[tb.name];
+    if (sm && sm.count) {
+      const n = sm.count, cleaner = sm.phase === 'cleaner';
+      for (let i = 0; i < n; i++) {
+        const ang = -Math.PI / 2 + i * (Math.PI * 2 / Math.max(n, 1)) + (cleaner ? Math.sin(t / 4000) * 0.6 : 0);
+        const px = cx + Math.cos(ang) * (tw * 0.5 + 10), py = cy + Math.sin(ang) * (th * 0.5 + 10);
+        g.fillStyle = cleaner ? '#c39bff' : '#f1d4b3';
+        g.beginPath(); g.arc(px, py, Math.min(W, H) * 0.028, 0, 7); g.fill();
+        g.strokeStyle = '#0d141b'; g.lineWidth = 2; g.stroke();
+      }
+    }
+  }
+}
+function roundRect(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+
+function drawZones(t) {
+  const W = cssW, H = cssH, pulse = 0.5 + 0.5 * Math.sin(performance.now() / 220);
+  for (const tb of S().tables) {
+    const vs = visualState(tb), col = COLORS[vs];
+    g.beginPath(); tb.poly.forEach(([x, y], i) => i ? g.lineTo(x * W, y * H) : g.moveTo(x * W, y * H)); g.closePath();
+    g.fillStyle = hexA(col, vs === 'free' ? 0.16 : 0.24); g.fill();
+    g.lineWidth = vs === 'wait' ? 2 + 3 * pulse : 2.5; g.strokeStyle = col; g.stroke();
+    const cx = tb.poly.reduce((s, p) => s + p[0], 0) / tb.poly.length * W;
+    const cy = tb.poly.reduce((s, p) => s + p[1], 0) / tb.poly.length * H;
+    const l1 = tb.name + ' · ' + (vs === 'free' ? 'free' : vs === 'cleaning' ? 'clean' : tb.guests + (tb.guests > 1 ? ' guests' : ' guest'));
+    const l2 = vs === 'free' ? '' : fmtDur(t - (vs === 'cleaning' ? tb.since : tb.seatedAt));
+    const fs = Math.max(10, Math.min(13, W * 0.028));
+    g.font = `600 ${fs}px IBM Plex Mono, monospace`; g.textAlign = 'center';
+    const tw = Math.max(g.measureText(l1).width, g.measureText(l2).width) + 12, lh = l2 ? fs * 2.6 : fs * 1.7;
+    g.fillStyle = 'rgba(8,14,20,.86)'; roundRect(cx - tw / 2, cy - lh / 2, tw, lh, 7); g.fill();
+    g.strokeStyle = col; g.lineWidth = 1.5; g.stroke();
+    g.fillStyle = '#e8eef4';
+    if (l2) { g.fillText(l1, cx, cy - fs * 0.15); g.fillStyle = col; g.fillText(l2, cx, cy + fs * 1.05); }
+    else g.fillText(l1, cx, cy + fs * 0.35);
+  }
+}
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`; }
+
+/* ---------- video + AI ---------- */
+const video = document.createElement('video');
+video.muted = true; video.loop = true; video.playsInline = true; video.setAttribute('playsinline', '');
+let aiErrors = 0, model = null, modelState = 'idle', lastDets = [], showBoxes = true, aiMs = 0, drawing = null;
+store.video.tables = (LS.get('bucke-zones', []) || []).map((z, i) => makeTable(z.name || 'T' + (i + 1), z.poly));
+function saveZones() { LS.set('bucke-zones', store.video.tables.map(t => ({ name: t.name, poly: t.poly }))); }
+
+function setAI(text, cls) { const el = $('#ai'); el.textContent = 'AI: ' + text; el.className = 'ai ' + (cls || ''); }
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('script')); document.head.appendChild(s); }); }
+async function ensureModel() {
+  if (model || modelState === 'loading') return;
+  modelState = 'loading'; setAI('downloading (about 5 MB)…');
+  try {
+    if (!window.tf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.22.0/tf.min.js');
+    await tf.ready();
+    model = await tf.loadGraphModel('model/centernet.json');
+    modelState = 'ready'; setAI('ready (' + tf.getBackend() + ')', 'ok');
+    aiLoop();
+  } catch (e) {
+    modelState = 'error'; setAI('could not load. Check your internet and reload the page.', 'err');
+  }
+}
+
+const CLASSES = { 0: 'person', 15: 'cat', 16: 'dog' };   // pets are detected so they can be ruled out
+const IN = 512, tileC = document.createElement('canvas'); tileC.width = tileC.height = IN;
+const tileG = tileC.getContext('2d');
+let lastTiles = 1, lastRoi = null;
+/* Area to examine: around the drawn tables (with margin) or the whole frame. */
+function regionOfInterest(sw, sh) {
+  const tbs = store.video.tables;
+  if (!settings.roi || !tbs.length) return { x: 0, y: 0, w: sw, h: sh };
+  let x1 = 1, y1 = 1, x2 = 0, y2 = 0;
+  for (const tb of tbs) for (const [px, py] of tb.poly) { x1 = Math.min(x1, px); y1 = Math.min(y1, py); x2 = Math.max(x2, px); y2 = Math.max(y2, py); }
+  const mx = (x2 - x1) * 0.25 + 0.04, my = (y2 - y1) * 0.25 + 0.04;
+  x1 = Math.max(0, x1 - mx); y1 = Math.max(0, y1 - my); x2 = Math.min(1, x2 + mx); y2 = Math.min(1, y2 + my);
+  return { x: x1 * sw, y: y1 * sh, w: (x2 - x1) * sw, h: (y2 - y1) * sh };
+}
+/* Overlapping square tiles: smaller tiles = each person gets more pixels = sharper detection. */
+function tiles(r) {
+  const short = Math.min(r.w, r.h);
+  const div = { fast: 1, sharp: 1.6, max: 2.3 }[settings.detail] || 1;
+  let T = Math.max(Math.min(short, 320), short / div);
+  const ov = settings.detail === 'fast' ? 0 : 0.25;
+  const along = (len) => { if (len <= T * 1.05) return [Math.max(0, (len - T) / 2)]; const n = Math.ceil((len - T) / (T * (1 - ov))) + 1; const out = []; for (let i = 0; i < n; i++) out.push((len - T) * i / (n - 1)); return out; };
+  let xs = along(r.w), ys = along(r.h);
+  while (xs.length * ys.length > 12) { T *= 1.15; xs = along(r.w); ys = along(r.h); }
+  const out = [];
+  for (const y of ys) for (const x of xs) out.push({ x: r.x + x, y: r.y + y, w: Math.min(T, r.w), h: Math.min(T, r.h) });
+  return out;
+}
+function overlap(a, b) {
+  const x1 = Math.max(a.x, b.x), y1 = Math.max(a.y, b.y), x2 = Math.min(a.x + a.w, b.x + b.w), y2 = Math.min(a.y + a.h, b.y + b.h);
+  const i = Math.max(0, x2 - x1) * Math.max(0, y2 - y1); if (!i) return { iou: 0, min: 0 };
+  return { iou: i / (a.w * a.h + b.w * b.h - i), min: i / Math.min(a.w * a.h, b.w * b.h) };
+}
+async function detectPeople(src, sw, sh) {
+  const found = [], roi = regionOfInterest(sw, sh), tl = tiles(roi);
+  lastTiles = tl.length; lastRoi = roi;
+  const petMin = Math.max(0.2, settings.minScore - 0.1);
+  for (const t of tl) {
+    tileG.drawImage(src, t.x, t.y, t.w, t.h, 0, 0, IN, IN);
+    const out = tf.tidy(() => model.execute(tf.browser.fromPixels(tileC).toFloat().expandDims(0), 'tower_0/detections'));
+    const d = await out.data(); out.dispose();
+    for (let i = 0; i < d.length; i += 6) {
+      const cls = d[i + 5] | 0, score = d[i + 4];
+      if (!(cls in CLASSES) || !(score >= (cls === 0 ? settings.minScore : petMin))) continue;
+      const x1 = Math.max(0, d[i]) / IN, y1 = Math.max(0, d[i + 1]) / IN, x2 = Math.min(IN, d[i + 2]) / IN, y2 = Math.min(IN, d[i + 3]) / IN;
+      if (x2 <= x1 || y2 <= y1) continue;
+      // boxes cut by a tile edge (not the frame edge) are partial views: keep them but mark them weaker
+      const edge = (x1 < 0.01 && t.x > 1) || (x2 > 0.99 && t.x + t.w < sw - 1) || (y1 < 0.01 && t.y > 1) || (y2 > 0.99 && t.y + t.h < sh - 1);
+      const sc = edge ? score * 0.85 : score;
+      if (sc < (cls === 0 ? settings.minScore : petMin)) continue;
+      found.push({ cls, label: CLASSES[cls], score: sc,
+        x: (t.x + x1 * t.w) / sw, y: (t.y + y1 * t.h) / sh, w: (x2 - x1) * t.w / sw, h: (y2 - y1) * t.h / sh });
+    }
+  }
+  found.sort((a, b) => b.score - a.score);
+  const keep = [];
+  for (const d of found) {
+    // the same object seen in two overlapping tiles
+    if (keep.some(k => k.cls === d.cls && (o => o.iou > 0.45 || o.min > 0.7)(overlap(k, d)))) continue;
+    keep.push(d);
+  }
+  // a "person" box that sits on a dog or cat box is the pet, not a guest
+  const pets = keep.filter(d => d.cls !== 0);
+  for (const pd of keep) {
+    if (pd.cls !== 0) continue;
+    const pet = pets.find(q => { const o = overlap(q, pd); return o.iou > 0.4 || (o.min > 0.75 && pd.w * pd.h < q.w * q.h * 1.6); });
+    if (pet && pet.score >= pd.score * 0.7) { pd.pet = pet.label; }
+  }
+  return keep;
+}
+function inPoly(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function grow(poly, k) {
+  const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length, cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+  return poly.map(([x, y]) => [cx + (x - cx) * k, cy + (y - cy) * k]);
+}
+function countPerTable(dets, tables) {
+  const counts = tables.map(() => 0);
+  const zones = tables.map(t => grow(t.poly, 1.12));
+  for (const d of dets) {
+    const pts = [[d.x + d.w / 2, d.y + d.h * 0.5], [d.x + d.w / 2, d.y + d.h * 0.8]];
+    let best = -1, bestDist = 1e9;
+    zones.forEach((z, i) => {
+      if (pts.some(([x, y]) => inPoly(x, y, z))) {
+        const cx = z.reduce((s, p) => s + p[0], 0) / z.length, cy = z.reduce((s, p) => s + p[1], 0) / z.length;
+        const dist = Math.hypot(cx - pts[0][0], cy - pts[0][1]);
+        if (dist < bestDist) { bestDist = dist; best = i; }
+      }
+    });
+    d.table = best >= 0 ? tables[best].name : null;
+    if (best >= 0) counts[best]++;
+  }
+  return counts;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function aiLoop() {
+  while (model) {
+    if (mode === 'video' && video.readyState >= 2 && video.videoWidth) {
+      const t0 = performance.now();
+      try {
+        const all = await detectPeople(video, video.videoWidth, video.videoHeight);
+        lastDets = all;
+        const dets = all.filter(d => d.cls === 0 && !d.pet), petsN = all.length - dets.length;
+        const st = store.video, t = clock.now(), counts = countPerTable(dets, st.tables);
+        // smooth out flicker: a person missed in one check still counts if seen in the check before
+        st.tables.forEach((tb, i) => { tb.hist = (tb.hist || []).filter(h => t - h.t < 6000); tb.hist.push({ t, c: counts[i] }); let c = Math.max(...tb.hist.map(h => h.c)); if (tb.claudeUntil > t) c = Math.max(c, tb.claudeGuests); updateTable(st, tb, c, t, counts[i]); });
+        aiMs = performance.now() - t0;
+        setAI(`${dets.length} ${dets.length === 1 ? 'person' : 'people'}${petsN ? ` · ${petsN} pet${petsN > 1 ? 's' : ''} ignored` : ''} · ${lastTiles} tile${lastTiles > 1 ? 's' : ''} · ${Math.round(aiMs)} ms`, 'ok');
+        aiErrors = 0;
+      } catch (e) {
+        aiErrors++;
+        const why = (e && e.message ? e.message : String(e)).slice(0, 90);
+        if (aiErrors >= 3 && tf.getBackend() !== 'cpu') {
+          setAI('graphics chip failed (' + why + '). Switching to slower mode…', 'err');
+          try { await tf.setBackend('cpu'); await tf.ready(); model = await tf.loadGraphModel('model/centernet.json'); aiErrors = 0; } catch (e2) {}
+        } else setAI('could not check this frame: ' + why, 'err');
+        await sleep(1500);
+      }
+      await sleep(60);
+    } else {
+      if (mode === 'video') { const st = store.video, t = clock.now(); st.tables.forEach(tb => updateTable(st, tb, tb.count, t)); }
+      await sleep(250);
+    }
+  }
+}
+
+let pickTimer = null;
+function loadHelp(html) { const el = $('#loadhelp'); el.hidden = !html; el.innerHTML = html || ''; }
+$('#b-load').addEventListener('click', () => {
+  loadHelp('');
+  try { $('#file').click(); } catch (e) {}
+  let left = false;
+  const onBlur = () => { left = true; };
+  window.addEventListener('blur', onBlur, { once: true });
+  document.addEventListener('visibilitychange', onBlur, { once: true });
+  clearTimeout(pickTimer);
+  pickTimer = setTimeout(() => {
+    if (!left && !video.src) loadHelp('<b>The video picker did not open.</b> The Claude app on some phones blocks choosing files inside pages. Open this page in Chrome instead: tap the ⋮ menu at the top, then <b>Open in browser</b>, sign in to Claude, and tap Load video again.');
+  }, 2500);
+});
+$('#file').addEventListener('change', e => {
+  clearTimeout(pickTimer);
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  if (video.src) URL.revokeObjectURL(video.src);
+  loadHelp('');
+  setAI('opening ' + f.name + ' (' + Math.round(f.size / 1048576) + ' MB)…');
+  video.src = URL.createObjectURL(f);
+  video.play().catch(() => {});
+  $('#b-play').textContent = 'Pause';
+  ensureModel();
+});
+video.addEventListener('error', () => {
+  if (!video.src || video.readyState >= 2) return;
+  setAI('this video could not be played (code ' + (video.error ? video.error.code : '?') + ')', 'err');
+  loadHelp('<b>Your phone could not play this video here.</b> Some phones record in a format (HEVC/H.265) that browsers can\'t open. In your camera settings choose <b>Most compatible</b> or <b>H.264</b>, or send the video to yourself on WhatsApp and load that copy, which is converted to a format that works.');
+});
+video.addEventListener('loadeddata', () => { loadHelp(''); if (modelState === 'ready') setAI('ready', 'ok'); });
+video.addEventListener('loadedmetadata', () => { aspect = video.videoWidth / video.videoHeight; fitCanvas(); });
+$('#b-play').addEventListener('click', () => {
+  if (!video.src) return;
+  if (video.paused) { video.play().catch(() => {}); $('#b-play').textContent = 'Pause'; } else { video.pause(); $('#b-play').textContent = 'Play'; }
+});
+$('#b-boxes').addEventListener('click', e => { showBoxes = !showBoxes; e.currentTarget.setAttribute('aria-pressed', showBoxes); e.currentTarget.textContent = 'AI boxes: ' + (showBoxes ? 'on' : 'off'); });
+$('#b-add').addEventListener('click', () => {
+  if (!video.src || video.readyState < 2) { loadHelp('<b>Load a video first,</b> then draw the tables on top of it.'); return; }
+  drawing = []; updateDrawUI();
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#b-cancel').addEventListener('click', () => { drawing = null; updateDrawUI(); });
+$('#b-undo').addEventListener('click', () => {
+  const st = store.video; if (!st.tables.length) return;
+  st.tables.pop(); saveZones(); renderSide(true);
+});
+function updateDrawUI() {
+  const on = drawing !== null;
+  $('#drawhint').classList.toggle('on', on); cv.classList.toggle('drawing', on);
+  $('#b-cancel').hidden = !on; $('#b-add').hidden = on;
+  if (on) $('#drawcount').textContent = drawing.length + '/4';
+}
+cv.addEventListener('click', e => {
+  if (drawing === null || mode !== 'video') return;
+  const r = cv.getBoundingClientRect();
+  drawing.push([(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]);
+  if (drawing.length === 4) {
+    const st = store.video; let n = 1; while (st.tables.some(t => t.name === 'T' + n)) n++;
+    st.tables.push(makeTable('T' + n, drawing)); saveZones();
+    drawing = null; renderSide(true);
+  }
+  updateDrawUI();
+});
+
+/* ---------- double-check with Claude ---------- */
+let sampleApi = null, claudeBusy = false;
+(async () => {
+  try { if (window.claude && claude.use) sampleApi = await claude.use('sample'); } catch (e) { sampleApi = null; }
+  if (sampleApi) { try { const lim = await sampleApi.limits(); if (!lim || !lim.images) sampleApi = null; } catch (e) {} }
+  $('#b-claude').hidden = !sampleApi;
+})();
+function frameWithZones() {
+  const vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, 1024 / Math.max(vw, vh));
+  const c = document.createElement('canvas'); c.width = Math.round(vw * k); c.height = Math.round(vh * k);
+  const x = c.getContext('2d'); x.drawImage(video, 0, 0, c.width, c.height);
+  const fs = Math.max(16, Math.round(c.width * 0.035));
+  for (const tb of store.video.tables) {
+    x.beginPath(); tb.poly.forEach(([px, py], i) => i ? x.lineTo(px * c.width, py * c.height) : x.moveTo(px * c.width, py * c.height)); x.closePath();
+    x.lineWidth = 3; x.strokeStyle = '#00e5ff'; x.stroke();
+    const cx = tb.poly.reduce((a, p) => a + p[0], 0) / 4 * c.width, top = Math.min(...tb.poly.map(p => p[1])) * c.height;
+    x.font = `bold ${fs}px sans-serif`; x.textAlign = 'center';
+    const w = x.measureText(tb.name).width + 12;
+    x.fillStyle = '#00e5ff'; x.fillRect(cx - w / 2, Math.max(0, top - fs - 6), w, fs + 8);
+    x.fillStyle = '#000'; x.fillText(tb.name, cx, Math.max(fs, top - 5));
+  }
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
+}
+let lastClaudeAt = 0;
+$('#b-claude').addEventListener('click', () => runClaudeCheck(false));
+async function runClaudeCheck(auto) {
+  const st = store.video;
+  if (!video.src || video.readyState < 2) { loadHelp('<b>Load a video first,</b> then ask Claude to check it.'); return; }
+  if (!st.tables.length) { loadHelp('<b>Add at least one table first,</b> so Claude knows which areas to check.'); return; }
+  if (claudeBusy) return;
+  lastClaudeAt = Date.now();
+  claudeBusy = true; const btn = $('#b-claude'); btn.disabled = true; btn.textContent = 'Claude is looking…';
+  const box = $('#ccheck'); box.hidden = false; box.innerHTML = '<p>Sending this frame to Claude. This takes a few seconds.</p>';
+  try {
+    const blob = await frameWithZones();
+    const names = st.tables.map(t => t.name).join(', ');
+    const prompt = `This is one frame from a café security camera. Table areas are outlined in cyan and labelled ${names}.
+For EACH labelled table area, look carefully, including people partly hidden behind others or chairs:
+- guests: number of customers sitting at that table (seated people, not passers-by). Never count dogs, cats or other animals, even if they sit on a chair
+- pets: number of animals in or next to that table area
+- staff: number of waiters or staff standing at that table serving or cleaning (uniform, apron, tray, standing beside seated guests)
+- dirty: true if the table has used cups, plates, glasses or rubbish left on it AND no guests are sitting there; otherwise false
+- note: under 10 words about anything unusual, or ""
+Reply ONLY with JSON in this exact shape, one entry per label, nothing else:
+{"tables":[{"name":"T1","guests":0,"staff":0,"pets":0,"dirty":false,"note":""}],"summary":"one short sentence about the whole scene"}`;
+    const out = await sampleApi.json(prompt, { images: [blob], modelTier: 'default' });
+    applyClaude(out);
+  } catch (e) {
+    const msg = e && e.code === 'not_granted' ? 'Claude checks are turned off for this page. Allow them when asked, then try again.'
+      : e && e.code === 'rate_limited' ? 'Too many checks in a short time. Wait a minute and try again.'
+      : 'Claude could not check this frame. Try again in a moment.';
+    box.innerHTML = `<p>${msg}</p>`;
+    if (e && e.code === 'not_granted') { btn.hidden = true; settings.claudeEvery = 0; }
+    if (e && e.code === 'rate_limited') lastClaudeAt = Date.now() + 5 * MIN;
+  } finally {
+    claudeBusy = false; btn.disabled = false; btn.textContent = 'Double-check with Claude';
+  }
+}
+setInterval(() => {
+  const every = Number(settings.claudeEvery) || 0;
+  if (!every || !sampleApi || mode !== 'video' || claudeBusy || video.paused || video.readyState < 2 || !store.video.tables.length) return;
+  if (Date.now() - lastClaudeAt >= every * MIN) runClaudeCheck(true);
+}, 5000);
+function applyClaude(out) {
+  const st = store.video, t = clock.now(), rows = [];
+  const list = out && Array.isArray(out.tables) ? out.tables : [];
+  for (const r of list) {
+    const tb = st.tables.find(x => x.name === String(r.name).trim().toUpperCase()); if (!tb) continue;
+    const guests = Math.max(0, Math.min(20, parseInt(r.guests, 10) || 0)), staff = Math.max(0, parseInt(r.staff, 10) || 0), dirty = !!r.dirty;
+    const before = visualState(tb), changes = [];
+    if (guests > 0) {
+      if (tb.status !== 'occupied') { Object.assign(tb, { status: 'occupied', since: t, seatedAt: t, guests, waiterAt: 0, alerted: false, presentSince: t, absentSince: null }); changes.push('marked seated'); }
+      else if (guests !== tb.guests) { changes.push(`guests ${tb.guests} → ${guests}`); tb.guests = guests; }
+      tb.claudeGuests = guests; tb.claudeUntil = t + 60000;
+      if (staff > 0 && !tb.waiterAt) { waiterVisited(tb, t); changes.push('waiter visit recorded'); }
+    } else {
+      tb.claudeGuests = 0; tb.claudeUntil = 0;
+      if (tb.status === 'occupied') {
+        st.sessions.push({ table: tb.name, start: tb.seatedAt, end: t, guests: Math.max(1, tb.guests), waiterAt: tb.waiterAt || 0, alerted: !!tb.alerted, src: 'claude' }); tb.lastSession = st.sessions[st.sessions.length - 1];
+        resolveAlerts(st, tb.name, t);
+        Object.assign(tb, { status: 'cleaning', since: t, cleanerSeen: false, absentSince: t });
+        changes.push('guests gone, needs cleaning');
+      }
+      if (tb.status === 'cleaning' && !dirty) { markClean(tb, t); changes.push('looks clean, marked free'); }
+      else if (tb.status === 'free' && dirty) { Object.assign(tb, { status: 'cleaning', since: t, cleanerSeen: false }); changes.push('dirty, needs cleaning'); }
+    }
+    rows.push({ name: tb.name, guests, staff, pets: Math.max(0, parseInt(r.pets, 10) || 0), dirty, note: String(r.note || '').slice(0, 80), changes });
+  }
+  const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  $('#ccheck').innerHTML = rows.length ? `<h3>Claude's check <span>${fmtClock(t)}</span></h3>
+    ${out.summary ? `<p>${esc(out.summary)}</p>` : ''}
+    <div style="overflow-x:auto"><table><thead><tr><th>Table</th><th>Guests</th><th>Staff</th><th>Pets</th><th>Dirty</th><th>Result</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td><b>${r.name}</b></td><td>${r.guests}</td><td>${r.staff}</td><td>${r.pets}</td><td>${r.dirty ? 'yes' : 'no'}</td>
+      <td class="${r.changes.length ? 'chg' : ''}">${r.changes.length ? esc(r.changes.join(', ')) : 'matches the app'}${r.note ? '<br><span style="color:var(--muted)">' + esc(r.note) + '</span>' : ''}</td></tr>`).join('')}
+    </tbody></table></div>` : '<p>Claude did not return table counts for this frame. Try again.</p>';
+  renderSide(true); renderReport(true);
+}
+
+function drawVideoFrame() {
+  const W = cssW, H = cssH;
+  if (video.readyState >= 2) g.drawImage(video, 0, 0, W, H);
+  else {
+    g.fillStyle = '#0b1218'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#93a7b9'; g.textAlign = 'center'; g.font = '500 15px IBM Plex Sans, sans-serif';
+    g.fillText('Tap “Load video” to choose', W / 2, H / 2 - 10);
+    g.fillText('a recording of your tables', W / 2, H / 2 + 12);
+  }
+  if (showBoxes && video.readyState >= 2) {
+    g.lineWidth = 2; g.font = '600 11px IBM Plex Mono, monospace'; g.textAlign = 'left';
+    if (lastRoi && settings.roi && store.video.tables.length && video.videoWidth) {
+      g.strokeStyle = 'rgba(109,182,240,.45)'; g.setLineDash([2, 6]); g.lineWidth = 1;
+      g.strokeRect(lastRoi.x / video.videoWidth * W, lastRoi.y / video.videoHeight * H, lastRoi.w / video.videoWidth * W, lastRoi.h / video.videoHeight * H);
+      g.setLineDash([]); g.lineWidth = 2;
+    }
+    for (const d of lastDets) {
+      const isPet = d.cls !== 0 || d.pet;
+      if (d.cls === 0 && d.pet) continue;   // drawn once, as the pet
+      const col = isPet ? '#ffb21f' : d.table ? '#ffffff' : '#6db6f0';
+      g.strokeStyle = col; g.setLineDash([5, 4]); g.strokeRect(d.x * W, d.y * H, d.w * W, d.h * H); g.setLineDash([]);
+      const txt = isPet ? `${d.label} ${Math.round(d.score * 100)}% · not counted` : `person ${Math.round(d.score * 100)}%`;
+      g.fillStyle = 'rgba(8,14,20,.8)'; g.fillRect(d.x * W, d.y * H - 15, g.measureText(txt).width + 8, 15);
+      g.fillStyle = col; g.fillText(txt, d.x * W + 4, d.y * H - 4);
+    }
+  }
+}
+function drawDrawing() {
+  if (!drawing || !drawing.length) return;
+  const W = cssW, H = cssH;
+  g.strokeStyle = '#6db6f0'; g.fillStyle = '#6db6f0'; g.lineWidth = 2;
+  g.beginPath(); drawing.forEach(([x, y], i) => i ? g.lineTo(x * W, y * H) : g.moveTo(x * W, y * H)); g.stroke();
+  for (const [x, y] of drawing) { g.beginPath(); g.arc(x * W, y * H, 6, 0, 7); g.fill(); }
+}
+
+/* ---------- side panels ---------- */
+const rowEls = new Map();
+function renderSide(force) {
+  const st = S(), t = clock.now();
+  $('#clock').textContent = fmtClock(t) + (mode === 'demo' ? ' · demo' : '');
+  const tbs = st.tables;
+  const free = tbs.filter(x => x.status === 'free').length;
+  const waitT = tbs.filter(x => visualState(x) === 'wait');
+  $('#k-free').textContent = `${free}/${tbs.length}`;
+  $('#k-guests').textContent = tbs.filter(x => x.status === 'occupied').reduce((s, x) => s + x.guests, 0);
+  $('#k-wait').textContent = waitT.length;
+  $('#k-clean').textContent = tbs.filter(x => x.status === 'cleaning').length;
+
+  // alerts
+  const active = st.alerts.filter(a => !a.resolved);
+  const sig = active.map(a => a.id).join(',') + '|' + Math.floor(t / 1000);
+  const al = $('#alerts');
+  if (force || al.dataset.sig !== sig) {
+    al.dataset.sig = sig;
+    al.innerHTML = active.length ? active.map(a => {
+      const tb = tbs.find(x => x.name === a.table);
+      return `<div class="alert"><span class="dot"></span><div><strong>${a.table}: no waiter yet</strong>Guests waiting ${fmtDur(t - a.at)}</div>
+        ${tb ? `<button class="btn" data-act="waiter" data-t="${a.table}">Waiter is there</button>` : ''}</div>`;
+    }).join('') : `<div class="empty">No tables waiting. You'll get an alert here if guests wait more than ${settings.alertMin} min without a waiter.</div>`;
+  }
+  const done = st.alerts.filter(a => a.resolved).length;
+  $('#alert-sum').textContent = done ? `${done} handled today` : '';
+
+  // next table
+  const occ = tbs.filter(x => x.status === 'occupied').sort((a, b) => a.seatedAt - b.seatedAt);
+  const stays = st.sessions.map(s => s.end - s.start);
+  const avgStay = stays.length ? stays.reduce((a, b) => a + b, 0) / stays.length : 40 * MIN;
+  const cleaning = tbs.filter(x => x.status === 'cleaning');
+  let nextHtml;
+  if (free) nextHtml = `<div class="next"><b style="color:var(--free)">${tbs.find(x => x.status === 'free').name}</b><div>Free now. Seat guests here.</div></div>`;
+  else if (cleaning.length) nextHtml = `<div class="next"><b style="color:var(--clean)">${cleaning[0].name}</b><div>Free as soon as it's cleaned.</div></div>`;
+  else if (occ.length) {
+    const left = Math.max(0, avgStay - (t - occ[0].seatedAt));
+    nextHtml = `<div class="next"><b style="color:var(--busy)">${occ[0].name}</b><div>Seated longest (${fmtDur(t - occ[0].seatedAt)}). ${left > 0 ? 'Likely free in about ' + Math.max(1, Math.round(left / MIN)) + ' min' : 'Should leave soon'}, based on today's average stay.</div></div>`;
+  } else nextHtml = `<div class="empty">Add tables to see which one frees up next.</div>`;
+  const nx = $('#next'); if (nx.innerHTML !== nextHtml) nx.innerHTML = nextHtml;
+
+  // table rows (keyed so buttons don't flicker)
+  const wrap = $('#trows');
+  if (force) { wrap.innerHTML = ''; rowEls.clear(); }
+  if (!tbs.length) { wrap.innerHTML = `<div class="empty">No tables yet. Tap <b>Add table</b> under the video.</div>`; return; }
+  else if (wrap.querySelector('.empty')) wrap.innerHTML = '';
+  for (const tb of tbs) {
+    let r = rowEls.get(tb.name);
+    if (!r) {
+      r = document.createElement('div'); r.className = 'trow';
+      r.innerHTML = `<div class="tname"></div><div class="tinfo"></div><div class="timer"></div><div class="act"></div>`;
+      wrap.appendChild(r); rowEls.set(tb.name, r);
+    }
+    const vs = visualState(tb);
+    r.style.setProperty('--sc', COLORS[vs]);
+    r.children[0].textContent = tb.name;
+    const pill = { free: 'Free', occupied: tb.waiterAt ? 'Served' : 'Seated', wait: 'No waiter', cleaning: 'Needs cleaning' }[vs];
+    const info = vs === 'free' ? 'Ready for guests' : vs === 'cleaning' ? 'Guests left' : `${tb.guests} guest${tb.guests > 1 ? 's' : ''} · since ${fmtClock(tb.seatedAt)}`;
+    r.children[1].innerHTML = `<span class="pill">${pill}</span>${info}`;
+    r.children[2].textContent = vs === 'free' ? '' : fmtDur(t - (vs === 'cleaning' ? tb.since : tb.seatedAt));
+    const act = tb.status === 'free' && mode === 'video' ? `<button class="btn" data-act="seat" data-t="${tb.name}">Guests are here</button>`
+      : tb.status === 'occupied' && mode === 'video' ? (tb.waiterAt ? '' : `<button class="btn" data-act="waiter" data-t="${tb.name}">Waiter visited</button>`) + `<button class="btn" data-act="left" data-t="${tb.name}">Guests left</button>`
+      : tb.status === 'occupied' && !tb.waiterAt ? `<button class="btn" data-act="waiter" data-t="${tb.name}">Waiter visited</button>`
+      : tb.status === 'cleaning' ? `<button class="btn" data-act="clean" data-t="${tb.name}">Mark clean</button>` : '';
+    if (r.children[3].dataset.k !== act) { r.children[3].dataset.k = act; r.children[3].innerHTML = act; }
+  }
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const tb = S().tables.find(x => x.name === b.dataset.t); if (!tb) return;
+  const t = clock.now();
+  if (b.dataset.act === 'waiter') waiterVisited(tb, t);
+  if (b.dataset.act === 'left' && tb.status === 'occupied') {
+    S().sessions.push({ table: tb.name, start: tb.seatedAt, end: t, guests: Math.max(1, tb.guests), waiterAt: tb.waiterAt || 0, alerted: !!tb.alerted, src: 'staff' }); tb.lastSession = S().sessions[S().sessions.length - 1];
+    resolveAlerts(S(), tb.name, t);
+    Object.assign(tb, { status: 'cleaning', since: t, cleanerSeen: false, prev: null, claudeUntil: 0, hist: [], rawStart: null });
+  }
+  if (b.dataset.act === 'seat') {
+    Object.assign(tb, { status: 'occupied', since: t, seatedAt: t, guests: Math.max(1, tb.count), waiterAt: 0, alerted: false, presentSince: t, absentSince: null });
+    tb.claudeGuests = tb.guests; tb.claudeUntil = t + 2 * MIN;
+  }
+  if (b.dataset.act === 'clean') { markClean(tb, t); if (mode === 'demo' && sims[tb.name]) Object.assign(sims[tb.name], { phase: 'idle', next: t + between(3, 15) * MIN }); }
+  renderSide(false); renderReport(true);
+});
+
+/* ---------- daily report ---------- */
+const H0 = 8, H1 = 22;
+function renderReport(force) {
+  const st = S(), t = clock.now(), nowH = new Date(t).getHours();
+  const per = []; for (let h = H0; h <= H1; h++) per.push(0);
+  const sess = st.sessions.slice();
+  for (const tb of st.tables) if (tb.status === 'occupied') sess.push({ start: tb.seatedAt, end: t, guests: tb.guests, open: true });
+  for (const s of sess) { const h = new Date(s.start).getHours(); if (h >= H0 && h <= H1) per[h - H0] += s.guests; }
+  const max = Math.max(1, ...per), peak = per.indexOf(Math.max(...per));
+  const sig = per.join(',') + '|' + nowH;
+  const bars = $('#bars');
+  if (force || bars.dataset.sig !== sig) {
+    bars.dataset.sig = sig;
+    bars.innerHTML = per.map((v, i) => `<div class="bar${i === peak && v ? ' peak' : ''}${H0 + i === nowH ? ' now' : ''}" style="height:${(v / max) * 100}%" title="${pad(H0 + i)}:00 · ${v} guests">${v ? `<span class="v">${v}</span>` : ''}</div>`).join('');
+    $('#hours').innerHTML = per.map((_, i) => `<span>${(H0 + i) % 2 === 0 ? H0 + i : ''}</span>`).join('');
+  }
+  const total = per.reduce((a, b) => a + b, 0);
+  $('#peakline').innerHTML = total ? `Busiest hour: <b>${pad(H0 + peak)}:00–${pad(H0 + peak + 1)}:00</b> with ${per[peak]} guests arriving.` : 'No guests yet today. Arrivals per hour will appear here.';
+  const closed = st.sessions;
+  $('#s-parties').textContent = sess.length;
+  $('#s-guests').textContent = total;
+  $('#s-avgg').textContent = sess.length ? (sess.reduce((a, s) => a + s.guests, 0) / sess.length).toFixed(1) : '0';
+  $('#s-stay').textContent = closed.length ? Math.round(closed.reduce((a, s) => a + (s.end - s.start), 0) / closed.length / MIN) + 'm' : '–';
+  $('#rep-date').textContent = new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + ` · ${pad(H0)}:00–${pad(H1)}:00`;
+}
+
+/* ---------- mode switching + main loop ---------- */
+function setMode(m) {
+  mode = m;
+  $('#m-demo').setAttribute('aria-pressed', m === 'demo'); $('#m-video').setAttribute('aria-pressed', m === 'video'); $('#m-mgr').setAttribute('aria-pressed', 'false');
+  $('#ops').hidden = false; $('#manager').hidden = true;
+  $('#tools-demo').hidden = m !== 'demo'; $('#tools-video').hidden = m !== 'video'; $('#steps').hidden = m !== 'video';
+  $('#feed-title').textContent = m === 'demo' ? 'Floor · demo' : 'Camera · your video';
+  drawing = null; updateDrawUI(); if (m === 'demo') $('#ccheck').hidden = true;
+  aspect = m === 'demo' ? FLOOR_ASPECT : (video.videoWidth ? video.videoWidth / video.videoHeight : 16 / 9);
+  if (m === 'demo') video.pause(); else if (video.src && $('#b-play').textContent === 'Pause') video.play().catch(() => {});
+  fitCanvas(); renderSide(true); renderReport(true);
+}
+$('#m-demo').addEventListener('click', () => setMode('demo'));
+$('#m-video').addEventListener('click', () => setMode('video'));
+$('#m-mgr').addEventListener('click', () => showManager());
+
+let lastSide = 0;
+function frame() {
+  const t = clock.now();
+  if (mode === 'demo') { demoTick(); drawFloor(t); } else drawVideoFrame();
+  drawZones(t); drawDrawing();
+  const p = performance.now();
+  if (p - lastSide > 400) { lastSide = p; renderSide(false); renderReport(false); }
+  requestAnimationFrame(frame);
+}
+demoInit();
+lastDemoT = clock.now();
+setMode('demo');
+requestAnimationFrame(frame);
+
+/* =========================================================
+   Saved visits (database) + Manager view
+   One document per day per device: visits/<YYYY-MM-DD>~<device>
+   ========================================================= */
+let dbApi = null, userApi = null, dbReady = false;
+const DEVICE = (() => { let d = LS.get('bucke-device', ''); if (!d) { d = 'd' + Math.random().toString(36).slice(2, 10); LS.set('bucke-device', d); } return d; })();
+const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const vid = () => 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+settings.saveOn = settings.saveOn !== false;
+$('#save-on').checked = settings.saveOn;
+$('#save-on').addEventListener('change', e => { settings.saveOn = e.target.checked; LS.set('bucke-settings', settings); syncNote(); });
+function syncNote(text, cls) {
+  const el = $('#save-note'), cb = $('#save-on');
+  el.className = 'savenote ' + (cls || '');
+  el.textContent = ''; el.appendChild(cb);
+  el.appendChild(document.createTextNode(' ' + (text || (settings.saveOn ? 'Save visits for the Manager view' : 'Saving is off'))));
+}
+
+const saved = { day: '', prev: [], last: '', busy: false };
+async function loadToday() {
+  const day = dayKey(Date.now());
+  saved.day = day; saved.prev = []; saved.last = '';
+  try {
+    const snap = await dbApi.doc(`visits/${day}~${DEVICE}`).get();
+    if (snap.exists) { const v = snap.data().visits; saved.prev = Array.isArray(v) ? v.slice() : []; saved.last = JSON.stringify(saved.prev); }
+  } catch (e) {}
+}
+function visitRecord(s) {
+  if (!s.id) s.id = vid();
+  return { id: s.id, table: s.table, start: Math.round(s.start), end: Math.round(s.end), guests: s.guests,
+           waiterAt: s.waiterAt ? Math.round(s.waiterAt) : 0, alerted: !!s.alerted, cleanedAt: s.cleanedAt ? Math.round(s.cleanedAt) : 0, src: s.src || 'ai' };
+}
+async function syncVisits() {
+  if (!dbReady || !settings.saveOn || saved.busy) return;
+  const today = dayKey(Date.now());
+  if (today !== saved.day) await loadToday();
+  const mine = store.video.sessions.filter(s => dayKey(s.start) === today).map(visitRecord);
+  const ids = new Set(mine.map(v => v.id));
+  const all = saved.prev.filter(v => !ids.has(v.id)).concat(mine).slice(-600);
+  const body = JSON.stringify(all);
+  if (body === saved.last) return;
+  saved.busy = true;
+  try {
+    await dbApi.doc(`visits/${today}~${DEVICE}`).set({ date: today, device: DEVICE, visits: all, updatedAt: Date.now() });
+    saved.last = body;
+    syncNote(`Saved ${all.length} visit${all.length === 1 ? '' : 's'} today`, 'ok');
+  } catch (e) {
+    syncNote(e && e.code === 'quota_exceeded' ? 'Database is full: delete old data in Manager' : 'Could not save (you may not have edit access)', 'err');
+  } finally { saved.busy = false; }
+}
+
+(async () => {
+  try { if (window.claude && claude.use) { dbApi = await claude.use('db'); userApi = await claude.use('user'); } } catch (e) {}
+  if (!dbApi) { syncNote('Saving needs the page opened on claude.ai', 'err'); mgr.dbMissing = true; if (!$('#manager').hidden) renderManager(); return; }
+  await loadToday(); dbReady = true; syncNote();
+  try { if (userApi && await userApi.isOwner()) $('#mg-clear').hidden = false; } catch (e) {}
+  setInterval(syncVisits, 3000);
+  if (!$('#manager').hidden) subscribeManager();
+})();
+
+/* ---------- manager ---------- */
+const mgr = { range: 1, docs: [], loaded: false, example: false, unsub: null, timer: null, dbMissing: false, error: '' };
+function showManager() {
+  $('#m-demo').setAttribute('aria-pressed', 'false'); $('#m-video').setAttribute('aria-pressed', 'false'); $('#m-mgr').setAttribute('aria-pressed', 'true');
+  $('#ops').hidden = true; $('#manager').hidden = false;
+  if (dbApi && !mgr.unsub) subscribeManager();
+  renderManager();
+}
+function sinceKey(days) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (days - 1)); return dayKey(d.getTime()); }
+function subscribeManager() {
+  if (mgr.unsub) mgr.unsub();
+  mgr.loaded = false; mgr.error = ''; renderManager();
+  clearTimeout(mgr.timer);
+  mgr.timer = setTimeout(() => { if (!mgr.loaded) { mgr.error = 'The database is not answering yet. Showing what has arrived so far.'; renderManager(); } }, 10000);
+  mgr.unsub = dbApi.collection('visits').where('date', '>=', sinceKey(30)).limit(1000).onSnapshot(snap => {
+    mgr.docs = snap.docs.map(d => d.data());
+    if (!snap.metadata.fromCache) { mgr.loaded = true; mgr.error = ''; clearTimeout(mgr.timer); }
+    renderManager();
+  }, err => { clearTimeout(mgr.timer); mgr.loaded = true; mgr.error = 'Could not read saved visits (' + (err && err.code || 'error') + ').'; renderManager(); });
+}
+document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
+  mgr.range = Number(b.dataset.range);
+  document.querySelectorAll('[data-range]').forEach(x => x.setAttribute('aria-pressed', x === b));
+  renderManager();
+}));
+$('#mg-example').addEventListener('click', e => { mgr.example = !mgr.example; e.currentTarget.setAttribute('aria-pressed', mgr.example); renderManager(); });
+
+/* example week, generated in the page and never saved */
+let exampleCache = null;
+function exampleVisits() {
+  if (exampleCache) return exampleCache;
+  let sd = 11; const r = () => { sd = (sd * 16807) % 2147483647; return (sd - 1) / 2147483646; };
+  const out = [], tables = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+  for (let dd = 29; dd >= 0; dd--) {
+    const base = new Date(); base.setHours(0, 0, 0, 0); base.setDate(base.getDate() - dd);
+    const weekend = [5, 6].includes(base.getDay()), now = Date.now();
+    for (const tb of tables) {
+      let t = base.getTime() + (8 + r() * 1.5) * 60 * MIN;
+      const slowWaiter = tb === 'T5' ? 2.2 : 1, slowClean = tb === 'T2' ? 2 : 1;
+      while (t < base.getTime() + 21.5 * 60 * MIN) {
+        const h = new Date(t).getHours() + new Date(t).getMinutes() / 60;
+        const busy = 0.2 + Math.exp(-((h - 12.8) ** 2) / 1.4) + 0.8 * Math.exp(-((h - 19.3) ** 2) / 1.8) + (weekend ? 0.35 : 0);
+        t += (4 + r() * 40) * MIN / busy;
+        const stay = (20 + r() * 50) * MIN, end = t + stay;
+        if (end > now) break;
+        const wait = (1 + r() * 6 * slowWaiter) * MIN, clean = (1 + r() * 5 * slowClean) * MIN;
+        out.push({ id: 'x' + out.length, table: tb, start: t, end, guests: 1 + Math.floor(r() * (weekend ? 5 : 4)),
+          waiterAt: t + wait, alerted: wait > 5 * MIN, cleanedAt: end + clean, src: 'example' });
+        t = end + clean;
+      }
+    }
+  }
+  return (exampleCache = out);
+}
+
+function fmtMin(ms) { if (ms == null || isNaN(ms)) return '–'; const m = ms / MIN; return m < 1 ? '<1 min' : m < 90 ? Math.round(m) + ' min' : (m / 60).toFixed(1) + ' h'; }
+const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+const escH = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function currentVisits() {
+  let all;
+  if (mgr.example) all = exampleVisits();
+  else {
+    const seen = new Set(); all = [];
+    for (const d of mgr.docs) for (const v of (Array.isArray(d.visits) ? d.visits : [])) {
+      if (!v || typeof v.start !== 'number' || seen.has(v.id)) continue; seen.add(v.id); all.push(v);
+    }
+  }
+  const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - (mgr.range - 1));
+  return all.filter(v => v.start >= since.getTime()).sort((a, b) => a.start - b.start);
+}
+function stats(vs) {
+  const waits = vs.filter(v => v.waiterAt > v.start).map(v => v.waiterAt - v.start);
+  const cleans = vs.filter(v => v.cleanedAt > v.end).map(v => v.cleanedAt - v.end);
+  return { groups: vs.length, guests: vs.reduce((a, v) => a + (v.guests || 0), 0),
+    stay: avg(vs.map(v => v.end - v.start)), wait: avg(waits), clean: avg(cleans),
+    alerts: vs.filter(v => v.alerted).length, perGroup: vs.length ? vs.reduce((a, v) => a + (v.guests || 0), 0) / vs.length : null };
+}
+
+function renderManager() {
+  if ($('#manager').hidden) return;
+  const st = $('#mg-status');
+  if (mgr.example) { st.textContent = 'Example data · made up to show what this page looks like'; st.className = 'mgr-status'; }
+  else if (mgr.dbMissing) { st.textContent = 'The database is only available when this page is opened on claude.ai.'; st.className = 'mgr-status err'; }
+  else if (mgr.error) { st.textContent = mgr.error; st.className = 'mgr-status err'; }
+  else if (!mgr.loaded) { st.textContent = 'Loading saved visits…'; st.className = 'mgr-status'; }
+  else { st.textContent = `Live · ${mgr.docs.length} day file${mgr.docs.length === 1 ? '' : 's'} · updated ${fmtClock(Date.now())}`; st.className = 'mgr-status'; }
+
+  const vs = currentVisits(), s = stats(vs);
+  const banner = $('#mg-banner');
+  if (!mgr.example && (mgr.loaded || mgr.dbMissing) && !vs.length) {
+    banner.hidden = false;
+    banner.innerHTML = `No saved visits ${mgr.range === 1 ? 'today' : 'in this period'} yet. Visits are saved when the camera runs in <b>My video</b> with "Save visits" ticked. Tap <b>Show example data</b> to see how this page looks with a month of visits.`;
+  } else if (mgr.example) { banner.hidden = false; banner.innerHTML = '<b>Example data.</b> These numbers are made up. Tap <b>Show example data</b> again to see your real saved visits.'; }
+  else banner.hidden = true;
+
+  const kpi = (val, label, col, sub) => `<div class="kpi" style="--c:${col}"><b>${val}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  $('#mg-kpis').innerHTML =
+    kpi(s.groups, 'Groups served', 'var(--accent)', s.perGroup ? s.perGroup.toFixed(1) + ' guests per group' : '') +
+    kpi(s.guests, 'Guests', 'var(--busy)', mgr.range > 1 && s.guests ? Math.round(s.guests / mgr.range) + ' per day on average' : '') +
+    kpi(fmtMin(s.stay), 'Average time at a table', 'var(--free)', '') +
+    kpi(fmtMin(s.wait), 'Wait for first waiter visit', 'var(--wait)', s.groups ? `${s.alerts} group${s.alerts === 1 ? '' : 's'} waited over ${settings.alertMin} min` : '') +
+    kpi(s.groups ? Math.round(s.alerts / s.groups * 100) + '%' : '–', 'Groups that triggered an alert', 'var(--wait)', '') +
+    kpi(fmtMin(s.clean), 'Time to clean after guests leave', 'var(--clean)', '');
+
+  // by hour
+  const H0m = 7, H1m = 22, per = [];
+  for (let h = H0m; h <= H1m; h++) per.push(0);
+  for (const v of vs) { const h = new Date(v.start).getHours(); if (h >= H0m && h <= H1m) per[h - H0m] += v.guests || 0; }
+  const max = Math.max(1, ...per), peak = per.indexOf(Math.max(...per));
+  $('#mg-hours').style.gridTemplateColumns = `repeat(${per.length},1fr)`; $('#mg-hours-x').style.gridTemplateColumns = `repeat(${per.length},1fr)`;
+  $('#mg-hours').innerHTML = per.map((v, i) => `<div class="bar${i === peak && v ? ' peak' : ''}" style="height:${v / max * 100}%" title="${pad(H0m + i)}:00 · ${v} guests">${v ? `<span class="v">${v}</span>` : ''}</div>`).join('');
+  $('#mg-hours-x').innerHTML = per.map((_, i) => `<span>${(H0m + i) % 3 === 0 ? H0m + i : ''}</span>`).join('');
+  $('#mg-hours-note').textContent = per[peak] ? `Busiest: ${pad(H0m + peak)}:00–${pad(H0m + peak + 1)}:00` : '';
+
+  // by day
+  const dcard = $('#mg-days-card'); dcard.hidden = mgr.range === 1;
+  if (mgr.range > 1) {
+    const days = [];
+    for (let i = mgr.range - 1; i >= 0; i--) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i); days.push({ key: dayKey(d.getTime()), d, g: 0 }); }
+    for (const v of vs) { const k = dayKey(v.start), x = days.find(y => y.key === k); if (x) x.g += v.guests || 0; }
+    const dm = Math.max(1, ...days.map(x => x.g)), best = days.reduce((a, b) => b.g > a.g ? b : a, days[0]);
+    const n = days.length; $('#mg-days').style.setProperty('--n', n); $('#mg-days-x').style.setProperty('--n', n);
+    $('#mg-days').innerHTML = days.map(x => `<div class="bar${x === best && x.g ? ' peak' : ''}" style="height:${x.g / dm * 100}%" title="${x.key} · ${x.g} guests">${x.g && n <= 10 ? `<span class="v">${x.g}</span>` : ''}</div>`).join('');
+    const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    $('#mg-days-x').innerHTML = days.map((x, i) => `<span>${n <= 10 ? wd[x.d.getDay()] : (i % 5 === 0 ? x.d.getDate() : '')}</span>`).join('');
+    $('#mg-days-note').textContent = best.g ? `Busiest: ${wd[best.d.getDay()]} ${best.d.getDate()}/${best.d.getMonth() + 1}` : '';
+  }
+
+  // per table
+  const names = [...new Set(vs.map(v => v.table))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const rows = names.map(n => ({ n, ...stats(vs.filter(v => v.table === n)) }));
+  const allWait = s.wait, allClean = s.clean;
+  $('#mg-tables').innerHTML = rows.length ? `<thead><tr><th>Table</th><th class="num">Groups</th><th class="num">Guests</th><th class="num">Avg stay</th><th class="num">Waiter wait</th><th class="num">Alerts</th><th class="num">Clean time</th></tr></thead><tbody>` +
+    rows.map(r => `<tr><td><b>${escH(r.n)}</b></td><td class="num">${r.groups}</td><td class="num">${r.guests}</td><td class="num">${fmtMin(r.stay)}</td>
+      <td class="num${r.wait && allWait && r.wait > allWait * 1.3 ? ' bad' : ''}">${fmtMin(r.wait)}</td><td class="num">${r.alerts}</td>
+      <td class="num${r.clean && allClean && r.clean > allClean * 1.3 ? ' bad' : ''}">${fmtMin(r.clean)}</td></tr>`).join('') + '</tbody>'
+    : '<tbody><tr><td class="note">No visits in this period.</td></tr></tbody>';
+
+  // latest visits
+  const last = vs.slice(-15).reverse();
+  $('#mg-visits-note').textContent = vs.length > 15 ? `15 of ${vs.length}` : '';
+  const dshort = t => mgr.range === 1 ? fmtClock(t) : `${new Date(t).getDate()}/${new Date(t).getMonth() + 1} ${fmtClock(t)}`;
+  $('#mg-visits').innerHTML = last.length ? `<thead><tr><th>Seated</th><th>Table</th><th class="num">Guests</th><th class="num">Stayed</th><th class="num">Waiter after</th><th class="num">Cleaned after</th><th>Recorded by</th></tr></thead><tbody>` +
+    last.map(v => `<tr><td>${dshort(v.start)}</td><td><b>${escH(v.table)}</b></td><td class="num">${v.guests}</td><td class="num">${fmtMin(v.end - v.start)}</td>
+      <td class="num${v.alerted ? ' bad' : ''}">${v.waiterAt > v.start ? fmtMin(v.waiterAt - v.start) : '–'}</td><td class="num">${v.cleanedAt > v.end ? fmtMin(v.cleanedAt - v.end) : '–'}</td>
+      <td>${{ ai: 'Camera AI', claude: 'Claude check', staff: 'Staff', example: 'Example' }[v.src] || 'Camera AI'}</td></tr>`).join('') + '</tbody>'
+    : '<tbody><tr><td class="note">No visits yet.</td></tr></tbody>';
+
+  // insights
+  const ins = [];
+  if (per[peak]) ins.push(`The busiest hour is <b>${pad(H0m + peak)}:00–${pad(H0m + peak + 1)}:00</b>, with ${per[peak]} guests arriving. Plan the most staff for it.`);
+  const slowW = rows.filter(r => r.wait).sort((a, b) => b.wait - a.wait)[0];
+  if (slowW && allWait && slowW.wait > allWait * 1.2 && rows.length > 1) ins.push(`Guests at <b>${escH(slowW.n)}</b> wait longest for a waiter: ${fmtMin(slowW.wait)} on average, against ${fmtMin(allWait)} for the café. It may be out of the waiters' sight line.`);
+  const slowC = rows.filter(r => r.clean).sort((a, b) => b.clean - a.clean)[0];
+  if (slowC && allClean && slowC.clean > allClean * 1.2 && rows.length > 1) ins.push(`<b>${escH(slowC.n)}</b> sits dirty longest after guests leave: ${fmtMin(slowC.clean)} on average. Seats are lost while it waits.`);
+  if (s.groups && s.alerts / s.groups > 0.2) ins.push(`${Math.round(s.alerts / s.groups * 100)}% of groups waited more than ${settings.alertMin} minutes before a waiter came.`);
+  if (s.perGroup) { const small = vs.filter(v => v.guests <= 2).length / vs.length; if (small > 0.6) ins.push(`${Math.round(small * 100)}% of groups are 1–2 people. Small tables suit this café.`); }
+  $('#mg-insights').innerHTML = ins.length ? ins.map(x => `<li>${x}</li>`).join('') : '<li class="note">Patterns appear here after a few visits have been saved.</li>';
+}
+
+/* copy as spreadsheet (tab-separated, pastes into Excel or Google Sheets) */
+$('#mg-copy').addEventListener('click', async e => {
+  const vs = currentVisits(), b = e.currentTarget;
+  const iso = t => t ? `${dayKey(t)} ${fmtClock(t)}` : '';
+  const lines = [['Date', 'Seated', 'Left', 'Table', 'Guests', 'Minutes at table', 'Minutes to waiter', 'Alert', 'Minutes to clean', 'Recorded by'].join('\t')]
+    .concat(vs.map(v => [dayKey(v.start), fmtClock(v.start), fmtClock(v.end), v.table, v.guests, Math.round((v.end - v.start) / MIN),
+      v.waiterAt > v.start ? Math.round((v.waiterAt - v.start) / MIN) : '', v.alerted ? 'yes' : 'no', v.cleanedAt > v.end ? Math.round((v.cleanedAt - v.end) / MIN) : '', v.src].join('\t')));
+  try { await navigator.clipboard.writeText(lines.join('\n')); b.textContent = `Copied ${vs.length} rows`; }
+  catch (err) { b.textContent = 'Copy was blocked'; }
+  setTimeout(() => { b.textContent = 'Copy as spreadsheet'; }, 2500);
+});
+
+/* owner: delete saved data for the selected period */
+$('#mg-clear').addEventListener('click', () => { $('#mg-confirm').hidden = false; });
+$('#mg-cancel').addEventListener('click', () => { $('#mg-confirm').hidden = true; });
+$('#mg-do-clear').addEventListener('click', async () => {
+  const btn = $('#mg-do-clear'); btn.disabled = true; btn.textContent = 'Deleting…';
+  const since = sinceKey(mgr.range);
+  try {
+    const snap = await dbApi.collection('visits').where('date', '>=', since).limit(1000).get();
+    for (const d of snap.docs) await dbApi.doc('visits/' + d.id).delete();
+    saved.prev = []; saved.last = ''; store.video.sessions.length = 0;
+  } catch (e) {}
+  btn.disabled = false; btn.textContent = 'Delete'; $('#mg-confirm').hidden = true;
+});
+setInterval(() => { if (!$('#manager').hidden && !mgr.example) renderManager(); }, 30000);
+</script>
+</body>
+</html>
