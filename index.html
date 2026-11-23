@@ -174,7 +174,7 @@ ol.steps{margin:0;padding-left:20px;font-size:13px;color:var(--muted);display:gr
       </div>
       <div class="feedbox" id="feedbox">
         <canvas id="feed" aria-label="Live view of the café floor with table zones"></canvas>
-        <div class="drawhint" id="drawhint">Tap the 4 corners of the table area (include the chairs). <span id="drawcount">0/4</span></div>
+        <div class="drawhint" id="drawhint"><span id="drawtext">Tap the 4 corners of the table area (include the chairs).</span> <span id="drawcount">0/4</span></div>
       </div>
       <div class="tools" id="tools-demo">
         <p class="note">Simulated café running 12× faster, so you can watch timers, alerts and cleaning happen. Switch to <b>My video</b> to run the AI on a recording.</p>
@@ -182,6 +182,8 @@ ol.steps{margin:0;padding-left:20px;font-size:13px;color:var(--muted);display:gr
       <div class="tools" id="tools-video" hidden>
         <button class="btn primary" id="b-load" type="button">Load video</button>
         <input type="file" id="file" accept="video/*,.mp4,.mov,.3gp,.webm,.mkv">
+        <button class="btn primary" id="b-find" hidden>Find tables (Claude)</button>
+        <button class="btn" id="b-quick">Quick add</button>
         <button class="btn" id="b-add">Add table</button>
         <button class="btn" id="b-cancel" hidden>Cancel</button>
         <button class="btn" id="b-undo">Remove last table</button>
@@ -197,7 +199,7 @@ ol.steps{margin:0;padding-left:20px;font-size:13px;color:var(--muted);display:gr
       </div>
       <ol class="steps" id="steps" hidden>
         <li>Record 20–60 seconds of the tables from a high corner, then tap <b>Load video</b>.</li>
-        <li>Tap <b>Add table</b> and tap the 4 corners around each table and its chairs.</li>
+        <li>Mark the tables: <b>Find tables (Claude)</b> marks them all in one tap. Or tap <b>Quick add</b> and tap the middle of each table. <b>Add table</b> lets you tap 4 exact corners.</li>
         <li>The AI counts people in each area: green when empty, red once guests sit.</li>
       </ol>
     </section>
@@ -245,6 +247,7 @@ ol.steps{margin:0;padding-left:20px;font-size:13px;color:var(--muted);display:gr
       <label for="set-detail">Detail (higher finds small or far-away people, but each check is slower)
         <select id="set-detail" class="sel"><option value="fast">Fast · whole picture at once</option><option value="sharp">Sharp · zooms into parts (recommended)</option><option value="max">Max · strongest zoom, slowest</option></select></label>
       <label for="set-roi" class="chk"><input type="checkbox" id="set-roi"> Only look around my tables (sharper and faster)</label>
+      <label for="set-quick">Quick add box size: <span id="quick-v"></span><input type="range" id="set-quick" min="0.12" max="0.45" step="0.02"></label>
       <label for="set-claude">Ask Claude to check automatically every (minutes, 0 = off). Tap the Claude button once first to allow it.<input type="number" id="set-claude" min="0" max="60" step="1"></label>
       <label for="set-score">AI sensitivity (lower finds more people, more mistakes): <span id="score-v"></span><input type="range" id="set-score" min="0.2" max="0.7" step="0.05"></label>
     </div>
@@ -302,7 +305,7 @@ const LS = {
 };
 
 /* ---------- settings ---------- */
-const settings = Object.assign({ detail: 'sharp', roi: true, claudeEvery: 0, alertMin: 5, sitSec: 8, leaveSec: 25, resumeSec: 45, minScore: 0.3, reoccupySec: 90, cleanSec: 3 }, LS.get('bucke-settings', {}));
+const settings = Object.assign({ quickSize: 0.24, detail: 'sharp', roi: true, claudeEvery: 0, alertMin: 5, sitSec: 8, leaveSec: 25, resumeSec: 45, minScore: 0.3, reoccupySec: 90, cleanSec: 3 }, LS.get('bucke-settings', {}));
 function bindSetting(id, key, cast) {
   const el = $(id); el.value = settings[key];
   el.addEventListener('input', () => { const v = cast(el.value); if (!isNaN(v) && v > 0) { settings[key] = v; LS.set('bucke-settings', settings); showScore(); } });
@@ -310,6 +313,9 @@ function bindSetting(id, key, cast) {
 function showScore() { $('#score-v').textContent = Number(settings.minScore).toFixed(2); }
 bindSetting('#set-alert', 'alertMin', Number); bindSetting('#set-sit', 'sitSec', Number);
 bindSetting('#set-leave', 'leaveSec', Number);
+const showQuick = () => { $('#quick-v').textContent = Math.round(settings.quickSize * 100) + '% of the picture'; };
+$('#set-quick').value = settings.quickSize; showQuick();
+$('#set-quick').addEventListener('input', e => { settings.quickSize = Number(e.target.value); LS.set('bucke-settings', settings); showQuick(); });
 $('#set-claude').value = settings.claudeEvery; $('#set-claude').addEventListener('input', e => { const v = Number(e.target.value); if (v >= 0) { settings.claudeEvery = v; LS.set('bucke-settings', settings); } });
 $('#set-detail').value = settings.detail; $('#set-detail').addEventListener('change', e => { settings.detail = e.target.value; LS.set('bucke-settings', settings); });
 $('#set-roi').checked = settings.roi; $('#set-roi').addEventListener('change', e => { settings.roi = e.target.checked; LS.set('bucke-settings', settings); }); bindSetting('#set-score', 'minScore', Number); showScore();
@@ -710,9 +716,16 @@ $('#b-play').addEventListener('click', () => {
   if (video.paused) { video.play().catch(() => {}); $('#b-play').textContent = 'Pause'; } else { video.pause(); $('#b-play').textContent = 'Play'; }
 });
 $('#b-boxes').addEventListener('click', e => { showBoxes = !showBoxes; e.currentTarget.setAttribute('aria-pressed', showBoxes); e.currentTarget.textContent = 'AI boxes: ' + (showBoxes ? 'on' : 'off'); });
+let drawMode = 'corners';
+function needVideo() { if (!video.src || video.readyState < 2) { loadHelp('<b>Load a video first,</b> then mark the tables on top of it.'); return true; } return false; }
+$('#b-quick').addEventListener('click', () => {
+  if (needVideo()) return;
+  drawMode = 'quick'; drawing = []; updateDrawUI();
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 $('#b-add').addEventListener('click', () => {
-  if (!video.src || video.readyState < 2) { loadHelp('<b>Load a video first,</b> then draw the tables on top of it.'); return; }
-  drawing = []; updateDrawUI();
+  if (needVideo()) return;
+  drawMode = 'corners'; drawing = []; updateDrawUI();
   box.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 $('#b-cancel').addEventListener('click', () => { drawing = null; updateDrawUI(); });
@@ -723,17 +736,29 @@ $('#b-undo').addEventListener('click', () => {
 function updateDrawUI() {
   const on = drawing !== null;
   $('#drawhint').classList.toggle('on', on); cv.classList.toggle('drawing', on);
-  $('#b-cancel').hidden = !on; $('#b-add').hidden = on;
-  if (on) $('#drawcount').textContent = drawing.length + '/4';
+  $('#b-cancel').hidden = !on; $('#b-add').hidden = on; $('#b-quick').hidden = on;
+  $('#b-cancel').textContent = on && drawMode === 'quick' ? 'Done' : 'Cancel';
+  $('#drawtext').textContent = drawMode === 'quick' ? 'Tap the middle of each table. Each tap adds one table. Tap Done when finished.' : 'Tap the 4 corners of the table area (include the chairs).';
+  if (on) $('#drawcount').textContent = drawMode === 'quick' ? `${store.video.tables.length} table${store.video.tables.length === 1 ? '' : 's'}` : drawing.length + '/4';
+}
+function addTable(poly) {
+  const st = store.video; let n = 1; while (st.tables.some(t => t.name === 'T' + n)) n++;
+  st.tables.push(makeTable('T' + n, poly)); saveZones(); renderSide(true);
 }
 cv.addEventListener('click', e => {
   if (drawing === null || mode !== 'video') return;
   const r = cv.getBoundingClientRect();
+  if (drawMode === 'quick') {
+    const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+    const vw = video.videoWidth || r.width, vh = video.videoHeight || r.height, half = settings.quickSize * Math.min(vw, vh) / 2;
+    const dx = half / vw, dy = half / vh, cl = v => Math.max(0, Math.min(1, v));
+    addTable([[cl(px - dx), cl(py - dy)], [cl(px + dx), cl(py - dy)], [cl(px + dx), cl(py + dy)], [cl(px - dx), cl(py + dy)]]);
+    updateDrawUI(); return;
+  }
   drawing.push([(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]);
   if (drawing.length === 4) {
-    const st = store.video; let n = 1; while (st.tables.some(t => t.name === 'T' + n)) n++;
-    st.tables.push(makeTable('T' + n, drawing)); saveZones();
-    drawing = null; renderSide(true);
+    addTable(drawing);
+    drawing = null;
   }
   updateDrawUI();
 });
@@ -743,8 +768,52 @@ let sampleApi = null, claudeBusy = false;
 (async () => {
   try { if (window.claude && claude.use) sampleApi = await claude.use('sample'); } catch (e) { sampleApi = null; }
   if (sampleApi) { try { const lim = await sampleApi.limits(); if (!lim || !lim.images) sampleApi = null; } catch (e) {} }
-  $('#b-claude').hidden = !sampleApi;
+  $('#b-claude').hidden = !sampleApi; $('#b-find').hidden = !sampleApi;
 })();
+function frameWithGrid() {
+  const vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, 1280 / Math.max(vw, vh));
+  const c = document.createElement('canvas'); c.width = Math.round(vw * k); c.height = Math.round(vh * k);
+  const x = c.getContext('2d'); x.drawImage(video, 0, 0, c.width, c.height);
+  const fs = Math.max(12, Math.round(Math.min(c.width, c.height) * 0.025));
+  x.font = `bold ${fs}px sans-serif`; x.lineWidth = 1;
+  for (let i = 1; i < 10; i++) {
+    const gx = c.width * i / 10, gy = c.height * i / 10;
+    x.strokeStyle = 'rgba(0,229,255,.55)';
+    x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, c.height); x.stroke();
+    x.beginPath(); x.moveTo(0, gy); x.lineTo(c.width, gy); x.stroke();
+    x.fillStyle = 'rgba(0,0,0,.7)'; x.fillRect(gx - fs, 0, fs * 2, fs + 4); x.fillRect(0, gy - fs / 2 - 2, fs * 2, fs + 4);
+    x.fillStyle = '#00e5ff'; x.textAlign = 'center'; x.fillText(String(i * 10), gx, fs); x.textAlign = 'left'; x.fillText(String(i * 10), 2, gy + fs / 2 - 1);
+  }
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.88));
+}
+$('#b-find').addEventListener('click', async () => {
+  if (needVideo() || claudeBusy) return;
+  claudeBusy = true; const btn = $('#b-find'); btn.disabled = true; btn.textContent = 'Claude is looking…';
+  const box2 = $('#ccheck'); box2.hidden = false; box2.innerHTML = '<p>Claude is looking for the tables in this frame. This takes a few seconds.</p>';
+  try {
+    const blob = await frameWithGrid();
+    const prompt = `This is one frame from a café camera, usually looking down from above. A cyan grid is drawn on it: x is labelled 0 (left edge) to 100 (right edge) along the top, y is labelled 0 (top edge) to 100 (bottom edge) down the left side.
+Find EVERY table where customers sit or could sit, including small round tables, bar tables and tables that are partly hidden or empty. Do NOT include the counter, shelves, plant stands or lamps.
+For each table give a box, in grid units 0–100, that covers the table top AND the chairs or seats that belong to it, plus the people sitting there. Keep boxes of neighbouring tables from overlapping much.
+Reply ONLY with JSON, nothing else:
+{"tables":[{"x1":0,"y1":0,"x2":0,"y2":0,"seats":2,"occupied":false,"note":"round table by the window"}]}`;
+    const out = await sampleApi.json(prompt, { images: [blob], modelTier: 'default' });
+    const cl = v => Math.max(0, Math.min(100, Number(v))) / 100;
+    const found = (out && Array.isArray(out.tables) ? out.tables : [])
+      .map(t => ({ x1: cl(Math.min(t.x1, t.x2)), y1: cl(Math.min(t.y1, t.y2)), x2: cl(Math.max(t.x1, t.x2)), y2: cl(Math.max(t.y1, t.y2)), note: String(t.note || '').slice(0, 60) }))
+      .filter(t => t.x2 - t.x1 > 0.02 && t.y2 - t.y1 > 0.02 && t.x2 - t.x1 < 0.9 && t.y2 - t.y1 < 0.9)
+      .sort((a, b) => (a.y1 + a.y2) - (b.y1 + b.y2) || (a.x1 + a.x2) - (b.x1 + b.x2));
+    if (!found.length) { box2.innerHTML = '<p>Claude did not find any tables in this frame. Try a moment when the tables are clearly visible, or use Quick add.</p>'; return; }
+    const st = store.video;
+    st.tables = found.map((t, i) => { const tb = makeTable('T' + (i + 1), [[t.x1, t.y1], [t.x2, t.y1], [t.x2, t.y2], [t.x1, t.y2]]); tb.note = t.note; return tb; });
+    saveZones(); renderSide(true);
+    box2.innerHTML = `<h3>Claude found ${found.length} table${found.length === 1 ? '' : 's'}</h3>
+      <p>Check the boxes on the video. If one is wrong, tap <b>Remove last table</b> or add a missing one with <b>Quick add</b>. Tapping Find tables again replaces all of them.</p>
+      <p>${found.map((t, i) => `<b>T${i + 1}</b>${t.note ? ': ' + t.note.replace(/[&<>"]/g, '') : ''}`).join(' · ')}</p>`;
+  } catch (e) {
+    box2.innerHTML = `<p>${e && e.code === 'rate_limited' ? 'Too many Claude requests in a short time. Wait a minute and try again.' : e && e.code === 'not_granted' ? 'Claude is not allowed on this page yet. Allow it when asked, then try again.' : 'Claude could not look at this frame. Try again in a moment, or use Quick add.'}</p>`;
+  } finally { claudeBusy = false; btn.disabled = false; btn.textContent = 'Find tables (Claude)'; }
+});
 function frameWithZones() {
   const vw = video.videoWidth, vh = video.videoHeight, k = Math.min(1, 1024 / Math.max(vw, vh));
   const c = document.createElement('canvas'); c.width = Math.round(vw * k); c.height = Math.round(vh * k);
