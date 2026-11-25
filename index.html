@@ -305,7 +305,8 @@ const LS = {
 };
 
 /* ---------- settings ---------- */
-const settings = Object.assign({ quickSize: 0.24, detail: 'sharp', roi: true, claudeEvery: 0, alertMin: 5, sitSec: 8, leaveSec: 25, resumeSec: 45, minScore: 0.3, reoccupySec: 90, cleanSec: 3 }, LS.get('bucke-settings', {}));
+const settings = Object.assign({ quickSize: 0.34, detail: 'sharp', roi: true, claudeEvery: 0, alertMin: 5, sitSec: 5, leaveSec: 25, resumeSec: 45, minScore: 0.3, reoccupySec: 90, cleanSec: 3 }, LS.get('bucke-settings', {}));
+if (settings.v !== 2) { settings.sitSec = 5; settings.quickSize = 0.34; settings.v = 2; LS.set('bucke-settings', settings); }
 function bindSetting(id, key, cast) {
   const el = $(id); el.value = settings[key];
   el.addEventListener('input', () => { const v = cast(el.value); if (!isNaN(v) && v > 0) { settings[key] = v; LS.set('bucke-settings', settings); showScore(); } });
@@ -338,8 +339,9 @@ function makeTable(name, poly) {
 /* Table state machine. count = people the camera sees inside the table area. */
 function updateTable(st, tb, count, t, raw) {
   if (raw === undefined) raw = count;
-  if (raw > 0) { if (tb.rawStart == null || t - tb.rawLast > 2500) tb.rawStart = t; tb.rawLast = t; }
-  else if (tb.rawLast != null && t - tb.rawLast > 2500) tb.rawStart = null;
+  const gap = Math.max(4000, (typeof aiMs === 'number' ? aiMs : 0) * 3);
+  if (raw > 0) { if (tb.rawStart == null || t - tb.rawLast > gap) tb.rawStart = t; tb.rawLast = t; }
+  else if (tb.rawLast != null && t - tb.rawLast > gap) tb.rawStart = null;
   tb.count = count;
   if (count > 0) { tb.absentSince = null; if (tb.presentSince == null) tb.presentSince = t; }
   else { tb.presentSince = null; if (tb.absentSince == null) tb.absentSince = t; }
@@ -631,19 +633,20 @@ function grow(poly, k) {
 }
 function countPerTable(dets, tables) {
   const counts = tables.map(() => 0);
-  const zones = tables.map(t => grow(t.poly, 1.12));
+  const zones = tables.map(t => grow(t.poly, 1.15));
   for (const d of dets) {
-    const pts = [[d.x + d.w / 2, d.y + d.h * 0.5], [d.x + d.w / 2, d.y + d.h * 0.8]];
-    let best = -1, bestDist = 1e9;
+    // 4 x 5 grid of points over the person's box; count how many fall inside each table area
+    let best = -1, bestFrac = 0;
     zones.forEach((z, i) => {
-      if (pts.some(([x, y]) => inPoly(x, y, z))) {
-        const cx = z.reduce((s, p) => s + p[0], 0) / z.length, cy = z.reduce((s, p) => s + p[1], 0) / z.length;
-        const dist = Math.hypot(cx - pts[0][0], cy - pts[0][1]);
-        if (dist < bestDist) { bestDist = dist; best = i; }
+      let inside = 0, n = 0;
+      for (let gx = 0; gx < 4; gx++) for (let gy = 0; gy < 5; gy++) {
+        n++; if (inPoly(d.x + d.w * (gx + 0.5) / 4, d.y + d.h * (gy + 0.5) / 5, z)) inside++;
       }
+      const frac = inside / n;
+      if (frac > bestFrac) { bestFrac = frac; best = i; }
     });
-    d.table = best >= 0 ? tables[best].name : null;
-    if (best >= 0) counts[best]++;
+    // 25% of the body inside is enough: from above, a seated guest is mostly next to the table, not on it
+    if (bestFrac >= 0.25) { d.table = tables[best].name; counts[best]++; } else d.table = null;
   }
   return counts;
 }
@@ -1134,6 +1137,7 @@ async function syncVisits() {
 }
 
 (async () => {
+  await Promise.resolve();   // let the rest of the script set up first (matters when there is no claude.ai host)
   try { if (window.claude && claude.use) { dbApi = await claude.use('db'); userApi = await claude.use('user'); } } catch (e) {}
   if (!dbApi) { syncNote('Saving needs the page opened on claude.ai', 'err'); mgr.dbMissing = true; if (!$('#manager').hidden) renderManager(); return; }
   await loadToday(); dbReady = true; syncNote();
